@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Multify · Partner Attribution Dashboard</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand"><span class="dot">✦</span> Multify <span style="color:var(--muted);font-weight:500;">Partner Console</span></div>
+    <a class="navlink" href="index.html">← Back to onboarding</a>
+  </div>
+
+  <div class="kicker" style="margin-top:26px;">Connector attribution · last 14 days</div>
+  <h1>The lead-gen you're driving, measured.</h1>
+  <p class="sub">Every recommendation, signup, and activation across the platform — the proof of value you show a connector partner. This view updates live as users move through onboarding.</p>
+
+  <div class="row" style="margin-top:18px;">
+    <span class="badge"><span class="live-dot"></span> Live · aggregate &amp; anonymized — no PII shared</span>
+    <label class="count" style="margin-left:auto;">Partner view:</label>
+    <select class="sel-input" id="connectorFilter"><option value="">All connectors</option></select>
+    <select class="sel-input" id="surfaceFilter">
+      <option value="">All surfaces</option>
+      <option value="onboarding">Onboarding</option>
+      <option value="in_chat">In-chat</option>
+    </select>
+  </div>
+
+  <div class="kpis" style="margin-top:16px;">
+    <div class="kpi"><div class="label">Net-new leads</div><div class="value green" id="kpiLeads">—</div></div>
+    <div class="kpi"><div class="label">Rec → Connected</div><div class="value blue" id="kpiConv">—</div></div>
+    <div class="kpi"><div class="label">Activation rate</div><div class="value" id="kpiAct">—</div></div>
+    <div class="kpi"><div class="label">Est. lead value</div><div class="value" id="kpiValue">—</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <h2>Conversion funnel</h2>
+      <p class="hint">Where users drop off between recommendation and an activated connector.</p>
+      <div class="funnel" id="funnel"></div>
+    </div>
+    <div class="panel">
+      <h2>Net-new leads / day</h2>
+      <p class="hint">Signups attributed to Multify recommendations.</p>
+      <canvas id="trend" height="150"></canvas>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <h2>Onboarding vs in-chat</h2>
+      <p class="hint">The core thesis: which surface converts recommendations into leads?</p>
+      <table id="surfaceTable"><thead><tr><th>Surface</th><th class="num">Recommended</th><th class="num">Leads</th><th class="num">Conversion</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="panel">
+      <h2>Top connectors by leads</h2>
+      <p class="hint">Which connectors this recommendation engine drives signups for.</p>
+      <table id="connectorTable"><thead><tr><th>Connector</th><th class="num">Recommended</th><th class="num">Leads</th><th class="num">Conv.</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="leadnote" style="margin-top:0;border-top:none;padding-top:0;">
+      <b style="color:var(--text)">Methodology &amp; caveats (for the partner conversation):</b><br>
+      • <b>Aggregate &amp; anonymized</b> — no personal data is shared with partners in this view; individual-level
+      lead sharing would require user consent, a DPA, and (under CCPA/CPRA) may count as a "sale/share" requiring opt-out. Not legal advice.<br>
+      • <b>Net-new detection</b> — distinguishing a brand-new signup from an existing customer reconnecting requires
+      partner cooperation or referral tagging; this prototype treats each connect as a lead for illustration.<br>
+      • <b>Attribution</b> — production would use referral parameters (UTM / OAuth referral fields) to defensibly claim credit and address incrementality.
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Multify · Smart Connector Onboarding</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand"><span class="dot">✦</span> Multify</div>
+    <a class="navlink" href="dashboard.html">Partner attribution dashboard →</a>
+  </div>
+
+  <div class="kicker">Onboarding · Step 2 of 3</div>
+  <h1>Let's connect the tools you'll actually use.</h1>
+  <p class="sub">Tell us who you are and what you're trying to do. We'll pre-select the connectors that fit — auto-enabled and ready, so you're productive from your first message.</p>
+
+  <div class="steps">
+    <div class="step active"></div>
+    <div class="step active"></div>
+    <div class="step" id="s3"></div>
+  </div>
+
+  <div class="kicker" style="margin-top:8px;">What best describes you?</div>
+  <div class="roles" id="roles"></div>
+
+  <div class="panel" id="needsPanel">
+    <h2>Anything specific you want to get done? <span class="tag new">optional</span></h2>
+    <p class="hint">Describe it in plain English — a live model maps it to the right connectors and adds them on top of your role bundle. <em>(Falls back to keyword matching if no model key is configured.)</em></p>
+    <textarea class="field" id="needs" rows="2" placeholder="e.g. 'pull stale deals from my CRM and email the prospects' or 'monitor our error rates and file tickets'"></textarea>
+    <div class="row">
+      <span class="count">Try:</span>
+      <span class="chip" onclick="fillNeed('pull stale deals from my CRM and email the prospects')">CRM + outreach</span>
+      <span class="chip" onclick="fillNeed('monitor our error rates and file bug tickets')">errors → tickets</span>
+      <span class="chip" onclick="fillNeed('schedule social posts and track campaign analytics')">social + analytics</span>
+      <button class="btn ghost" style="margin-left:auto" id="interpretBtn" onclick="interpretNeeds()">Interpret &amp; add</button>
+    </div>
+    <div class="row"><span class="spin hidden" id="spin">Asking the model…</span></div>
+  </div>
+
+  <div class="panel hidden" id="bundlePanel">
+    <h2>Your recommended connectors</h2>
+    <p class="hint" id="bundleHint"></p>
+    <div id="connectors"></div>
+    <div class="summary" id="summary"></div>
+    <div class="row">
+      <button class="btn" id="connectBtn">Connect enabled &amp; continue →</button>
+      <button class="btn ghost" onclick="resetAll()">Start over</button>
+    </div>
+    <div class="leadnote">
+      Every connector enabled here becomes an <b>account creation with that service</b> — the moment a
+      recommendation turns into a <b>qualified lead</b>. Each of these interactions is captured and flows
+      into the <b>partner attribution dashboard</b> (linked above) in real time.
+    </div>
+  </div>
+</div>
+
+<script src="taxonomy.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
