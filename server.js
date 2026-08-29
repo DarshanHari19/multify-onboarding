@@ -101,7 +101,7 @@ function seedBaseline() {
       // onboarding converts materially better than in-chat — the core thesis.
       for (const surface of SURFACES) {
         const surfaceBoost = surface === "onboarding" ? 1.6 : 1.0;
-        const recs = Math.round((3 + rand() * 9));
+        const recs = Math.round((5 + rand() * 11));
         for (let i = 0; i < recs; i++) {
           const role = ROLE_KEYS[Math.floor(rand() * ROLE_KEYS.length)];
           push(dayTs, "recommended", id, role, surface);
