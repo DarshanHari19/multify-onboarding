@@ -344,6 +344,22 @@ app.get("/api/metrics", (req, res) => {
   const seriesArr = [];
   for (let d = 13; d >= 0; d--) seriesArr.push({ day: d, leads: series[d] || 0 });
 
+  // Last 10 live (this-session) funnel events, newest first — the activity
+  // ticker that pairs with liveSummary's counter (see dashboard.js
+  // renderActivity). Feedback events are excluded, same as the funnel above.
+  const recentLive = rows
+    .filter((e) => STAGES.includes(e.stage) && e.live)
+    .slice(-10)
+    .reverse()
+    .map((e) => ({
+      id: e.id,
+      stage: e.stage,
+      connectorId: e.connectorId,
+      name: DISPLAY[e.connectorId].name,
+      ico: DISPLAY[e.connectorId].ico,
+      ts: e.ts,
+    }));
+
   res.json({
     generatedAt: now,
     funnel,
@@ -358,6 +374,7 @@ app.get("/api/metrics", (req, res) => {
     // This session's own activity, isolated from the seeded baseline — see
     // the `live` flag on events. Same filters as everything else above.
     liveSummary,
+    recentLive,
     feedback: summarizeFeedback(rows),
     // Filter-dropdown options: only connectors with actual events, not the
     // full registry — keeps the dropdown usable while still covering any
