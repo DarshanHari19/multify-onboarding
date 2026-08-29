@@ -1,16 +1,25 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Multify · Smart Connector Onboarding</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Krona+One&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="styles.css" />
+<script src="theme.js"></script>
 </head>
 <body>
 <div class="wrap">
   <div class="topbar">
-    <div class="brand"><span class="dot">✦</span> Multify</div>
+    <div class="brand">
+      <img class="brand-mark brand-mark-dark" src="img/multify-mark-dark.png" alt="" />
+      <img class="brand-mark brand-mark-light" src="img/multify-mark-light.png" alt="" />
+      Multify
+    </div>
     <a class="navlink" href="dashboard.html">Partner attribution dashboard →</a>
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme"></button>
   </div>
 
   <div class="kicker">Onboarding · Step 2 of 3</div>
@@ -35,7 +44,7 @@
       <span class="chip" onclick="fillNeed('pull stale deals from my CRM and email the prospects')">CRM + outreach</span>
       <span class="chip" onclick="fillNeed('monitor our error rates and file bug tickets')">errors → tickets</span>
       <span class="chip" onclick="fillNeed('schedule social posts and track campaign analytics')">social + analytics</span>
-      <button class="btn ghost" style="margin-left:auto" id="interpretBtn" onclick="interpretNeeds()">Interpret &amp; add</button>
+      <button class="btn" style="margin-left:auto" id="interpretBtn" onclick="interpretNeeds()">Interpret &amp; add</button>
     </div>
     <div class="row"><span class="spin hidden" id="spin">Asking the model…</span></div>
   </div>

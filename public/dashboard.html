@@ -1,16 +1,25 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Multify · Partner Attribution Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Krona+One&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="styles.css" />
+<script src="theme.js"></script>
 </head>
 <body>
 <div class="wrap">
   <div class="topbar">
-    <div class="brand"><span class="dot">✦</span> Multify <span style="color:var(--muted);font-weight:500;">Partner Console</span></div>
+    <div class="brand">
+      <img class="brand-mark brand-mark-dark" src="img/multify-mark-dark.png" alt="" />
+      <img class="brand-mark brand-mark-light" src="img/multify-mark-light.png" alt="" />
+      Multify <span style="font-family:'Instrument Sans',sans-serif;color:var(--muted);font-weight:500;">Partner Console</span>
+    </div>
     <a class="navlink" href="index.html">← Back to onboarding</a>
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme"></button>
   </div>
 
   <div class="kicker" style="margin-top:26px;">Connector attribution · last 14 days</div>

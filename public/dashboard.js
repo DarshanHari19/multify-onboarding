@@ -13,6 +13,18 @@ function fmtPct(x) { return (x * 100).toFixed(1) + "%"; }
 function fmtNum(n) { return n.toLocaleString(); }
 function convClass(x) { return x >= 0.18 ? "good" : x >= 0.1 ? "mid" : "low"; }
 
+/* Chart colors come from the CSS theme tokens (not hardcoded) so the trend
+   chart re-colors when the light/dark toggle flips — see theme.js. */
+function themeColor(varName) {
+  return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+}
+function hexToRgba(hex, alpha) {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const n = parseInt(full, 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
+
 async function load() {
   const connector = $("connectorFilter").value;
   const surface = $("surfaceFilter").value;
@@ -40,7 +52,7 @@ function initConnectorFilter(connectors) {
   const sel = $("connectorFilter");
   Object.entries(connectors).forEach(([id, c]) => {
     const o = document.createElement("option");
-    o.value = id; o.textContent = `${c.ico} ${c.name}`;
+    o.value = id; o.textContent = c.name; // <option> can't render <img>, name only
     sel.appendChild(o);
   });
   filtersInit = true;
@@ -63,18 +75,21 @@ function renderTrend(series) {
   const data = series.map((p) => p.leads);
   const ctx = $("trend").getContext("2d");
   if (trendChart) { trendChart.data.labels = labels; trendChart.data.datasets[0].data = data; trendChart.update(); return; }
+  const textColor = themeColor("--text");
+  const mutedColor = themeColor("--muted");
+  const borderColor = themeColor("--border");
   trendChart = new Chart(ctx, {
     type: "line",
     data: { labels, datasets: [{
       label: "Net-new leads", data,
-      borderColor: "#5cc8ff", backgroundColor: "rgba(92,200,255,.15)",
+      borderColor: textColor, backgroundColor: hexToRgba(textColor, .12),
       fill: true, tension: .35, pointRadius: 2,
     }]},
     options: {
       plugins: { legend: { display: false } },
       scales: {
-        x: { grid: { color: "#20252a" }, ticks: { color: "#8a929b", maxTicksLimit: 8 } },
-        y: { grid: { color: "#20252a" }, ticks: { color: "#8a929b" }, beginAtZero: true },
+        x: { grid: { color: borderColor }, ticks: { color: mutedColor, maxTicksLimit: 8 } },
+        y: { grid: { color: borderColor }, ticks: { color: mutedColor }, beginAtZero: true },
       },
     },
   });
@@ -98,7 +113,7 @@ function renderSurface(bySurface) {
 function renderConnectors(table) {
   const rows = table.slice(0, 10).map((c) => `
     <tr>
-      <td>${c.ico} ${c.name}</td>
+      <td><img class="ico-img-sm" src="${c.ico}" alt="" /> ${c.name}</td>
       <td class="num">${fmtNum(c.recommended)}</td>
       <td class="num">${fmtNum(c.signed_up)}</td>
       <td class="num"><span class="pill ${convClass(c.conversion)}">${fmtPct(c.conversion)}</span></td>
@@ -108,5 +123,9 @@ function renderConnectors(table) {
 
 $("connectorFilter").addEventListener("change", load);
 $("surfaceFilter").addEventListener("change", load);
+document.addEventListener("themechange", () => {
+  if (trendChart) { trendChart.destroy(); trendChart = null; }
+  load(); // rebuild the chart immediately with the new theme's colors
+});
 load();
 setInterval(load, 4000); // live refresh — picks up events from the recommender

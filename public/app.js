@@ -7,6 +7,10 @@ let selectedRole = null;
 let enabled = {};   // id -> bool
 let present = [];   // ordered ids currently shown
 let reasons = {};   // id -> why
+let extraMeta = {}; // id -> {name, ico, cat, desc} for ids not in TAXONOMY.CONNECTORS
+                     // (RAG/registry connectors — the /api/recommend payload carries
+                     // their display metadata since they aren't in the curated catalog)
+function displayFor(id) { return CONNECTORS[id] || extraMeta[id]; }
 const SURFACE = "onboarding"; // this whole flow is the onboarding surface
 
 const $ = (id) => document.getElementById(id);
@@ -29,7 +33,7 @@ function renderRoles() {
     const d = document.createElement("button");
     d.className = "role" + (selectedRole === key ? " sel" : "");
     d.onclick = () => pickRole(key);
-    d.innerHTML = `<div class="emoji">${r.emoji}</div><h3>${r.title}</h3><p>${r.blurb}</p>`;
+    d.innerHTML = `<div class="role-icon">${r.icon}</div><h3>${r.title}</h3><p>${r.blurb}</p>`;
     c.appendChild(d);
   });
 }
@@ -48,24 +52,30 @@ function pickRole(key) {
   $("bundlePanel").scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-function addConnector(id, why) {
+function addConnector(id, why, suggested, meta) {
+  if (meta) extraMeta[id] = meta;
   if (!present.includes(id)) {
-    present.push(id); enabled[id] = true; reasons[id] = why || "Matched from what you described";
+    present.push(id);
+    // Risk gate: anything surfaced via free text (curated keyword match OR
+    // RAG) starts OFF — only hand-curated role-bundle entries auto-enable.
+    enabled[id] = !suggested;
+    reasons[id] = why || "Matched from what you described";
     track("recommended", id);
-  } else {
-    enabled[id] = true;
   }
+  // Already present (e.g. from the role bundle) — don't force its toggle;
+  // just refresh the reason text so the free-text "why" still shows.
+  else if (why) reasons[id] = why;
 }
 
 function renderConnectors() {
   const c = $("connectors"); c.innerHTML = "";
   present.forEach((id) => {
-    const k = CONNECTORS[id]; if (!k) return;
+    const k = displayFor(id); if (!k) return;
     const on = !!enabled[id];
     const row = document.createElement("div");
     row.className = "conn";
     row.innerHTML = `
-      <div class="ico">${k.ico}</div>
+      <div class="ico"><img src="${k.ico}" alt="" /></div>
       <div class="meta">
         <div class="name">${k.name}
           <span class="tag">${k.cat}</span>
@@ -105,14 +115,13 @@ async function interpretNeeds() {
       body: JSON.stringify({ needText: text }),
     });
     const data = await res.json();
-    const ids = data.ids || [];
-    if (ids.length === 0) {
+    const connectors = data.connectors || [];
+    if (connectors.length === 0) {
       $("bundleHint").innerHTML = "Couldn't map that to a connector — try naming a tool or task type.";
     } else {
-      const label =
-        data.source === "llm" ? `matched by model (${data.model || "llm"})`
-          : "matched by keyword fallback";
-      ids.forEach((id) => addConnector(id, `Added from your request · ${label}`));
+      connectors.forEach((c) =>
+        addConnector(c.id, c.why, c.suggested, { name: c.name, ico: c.ico, cat: c.cat, desc: c.desc })
+      );
     }
     renderConnectors();
     $("bundlePanel").scrollIntoView({ behavior: "smooth", block: "center" });
@@ -127,7 +136,7 @@ async function interpretNeeds() {
 function fillNeed(s) { $("needs").value = s; }
 
 function resetAll() {
-  selectedRole = null; enabled = {}; present = []; reasons = {};
+  selectedRole = null; enabled = {}; present = []; reasons = {}; extraMeta = {};
   $("needs").value = "";
   $("bundlePanel").classList.add("hidden");
   $("s3").classList.remove("active");
@@ -139,7 +148,7 @@ function doConnect() {
   const chosen = present.filter((id) => enabled[id]);
   // fire the rest of the funnel for each enabled connector
   chosen.forEach((id) => { track("clicked", id); track("signed_up", id); track("connected", id); });
-  const names = chosen.map((id) => CONNECTORS[id].name);
+  const names = chosen.map((id) => displayFor(id).name);
   alert(
     "Connecting: " + names.join(", ") +
     "\n\nEach opens an account-creation / OAuth flow with the service (the lead-gen moment) " +
