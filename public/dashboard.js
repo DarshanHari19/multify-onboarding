@@ -11,6 +11,14 @@ const LIVE_STAGES = [
   { key: "connected", label: "Connected" },
   { key: "signed_up", label: "Leads" },
 ];
+const ACTIVITY_VERB = {
+  recommended: "recommended",
+  clicked: "clicked connect on",
+  signed_up: "signed up for",
+  connected: "connected",
+  activated: "activated",
+};
+let lastActivityIds = new Set(); // previous poll's recentLive ids, to pulse only new rows
 const LEAD_VALUE = 12; // illustrative $ per net-new lead
 let trendChart = null;
 let filtersInit = false;
@@ -57,6 +65,7 @@ async function load() {
   renderSurface(m.bySurface);
   renderConnectors(m.connectorTable);
   renderLiveStats(m.liveSummary);
+  renderActivity(m.recentLive);
   renderFeedbackSummary(m.feedback, m.connectors);
 }
 
@@ -70,6 +79,29 @@ function renderLiveStats(liveSummary) {
     </div>`;
   }).join("");
   lastLive = liveSummary;
+}
+
+function relativeTime(ts) {
+  const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (diffSec < 30) return "just now";
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function renderActivity(recentLive) {
+  const items = recentLive || [];
+  const seenIds = new Set(items.map((e) => e.id));
+  $("activityFeed").innerHTML = items.length
+    ? items.map((e) => {
+        const isNew = !lastActivityIds.has(e.id);
+        return `<div class="activity-row${isNew ? " pulse" : ""}">
+          <span class="ico-sm"><img src="${e.ico}" alt="" /></span>
+          <span class="activity-text">${ACTIVITY_VERB[e.stage] || e.stage} <b>${e.name}</b></span>
+          <span class="activity-time">${relativeTime(e.ts)}</span>
+        </div>`;
+      }).join("")
+    : `<div class="count">No live activity yet this session.</div>`;
+  lastActivityIds = seenIds;
 }
 
 function renderFeedbackSummary(feedback, connectors) {
