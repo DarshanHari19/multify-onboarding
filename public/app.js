@@ -98,7 +98,8 @@ function renderConnectors() {
     // other connector (freely toggleable).
     const needsConsent = !!k.sensitive && !on;
     const aff = affinity[id];
-    const showCue = aff && aff.n >= AFFINITY_MIN_N;
+    const inBundle = selectedRole && ROLES[selectedRole].bundle.some((b) => b.id === id);
+    const showCue = inBundle && aff && aff.n >= AFFINITY_MIN_N;
     const row = document.createElement("div");
     row.className = "conn" + (needsConsent ? " needs-consent" : "");
     row.innerHTML = `
