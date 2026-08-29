@@ -13,6 +13,18 @@ let extraMeta = {}; // id -> {name, ico, cat, desc} for ids not in TAXONOMY.CONN
 function displayFor(id) { return CONNECTORS[id] || extraMeta[id]; }
 const SURFACE = "onboarding"; // this whole flow is the onboarding surface
 
+let affinity = {}; // connectorId -> { recommended, connected, rate, n }, for the currently selected role
+
+/* ---- flywheel: per-role connect-rate cue (computed, never hardcoded) ---- */
+const AFFINITY_MIN_N = 20;
+async function loadAffinity(role) {
+  try {
+    const res = await fetch(`/api/affinity?role=${encodeURIComponent(role)}`);
+    const data = await res.json();
+    if (selectedRole === role) { affinity = data || {}; renderConnectors(); }
+  } catch (e) { /* no cue shown if the fetch fails — non-critical */ }
+}
+
 const $ = (id) => document.getElementById(id);
 
 /* ---- event capture (fire-and-forget) ---- */
@@ -48,6 +60,8 @@ function pickRole(key) {
   $("s3").classList.add("active");
   $("bundleHint").innerHTML = `Curated for <b>${r.title}</b>. Auto-enabled ones are on by default — toggle any off, or add more below.`;
   renderRetrievalNote({});
+  affinity = {};
+  loadAffinity(key);
   renderRoles(); renderConnectors();
   trackMany("recommended", present); // the whole bundle was recommended
   $("bundlePanel").scrollIntoView({ behavior: "smooth", block: "center" });
@@ -83,6 +97,8 @@ function renderConnectors() {
     // an explicit opt-in until the user consents, then behaves like any
     // other connector (freely toggleable).
     const needsConsent = !!k.sensitive && !on;
+    const aff = affinity[id];
+    const showCue = aff && aff.n >= AFFINITY_MIN_N;
     const row = document.createElement("div");
     row.className = "conn" + (needsConsent ? " needs-consent" : "");
     row.innerHTML = `
@@ -93,6 +109,7 @@ function renderConnectors() {
           ${k.isNew ? '<span class="tag new">new · remote MCP</span>' : ""}
         </div>
         <div class="why">${reasons[id] || ""}</div>
+        ${showCue ? `<div class="affinity-cue">${Math.round(aff.rate * 100)}% of ${ROLES[selectedRole].title} users who saw this connected it · based on connection data, illustrative</div>` : ""}
         ${needsConsent ? `<div class="consent"><span class="consent-icon">${ICONS.alertTriangle}</span>${CONSENT_COPY[k.sensitive]} — enable?</div>` : ""}
       </div>
       <div class="feedback" title="This trains your bundles">
@@ -200,7 +217,7 @@ function renderRetrievalNote(data) {
 function fillNeed(s) { $("needs").value = s; }
 
 function resetAll() {
-  selectedRole = null; enabled = {}; present = []; reasons = {}; extraMeta = {};
+  selectedRole = null; enabled = {}; present = []; reasons = {}; extraMeta = {}; affinity = {};
   $("needs").value = "";
   $("bundlePanel").classList.add("hidden");
   $("firstWinPanel").classList.add("hidden");
