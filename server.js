@@ -11,6 +11,7 @@ import { summarizeFeedback } from "./lib/feedback.js";
 import { inferRoleFromText } from "./lib/roleinfer.js";
 import { generateFirstWinTasksLLM } from "./lib/firstwin.js";
 import { cleanDisplayName } from "./lib/displayname.js";
+import { roleFit, buildFitJitterTable } from "./lib/rolefit.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -80,6 +81,16 @@ const SURFACES = ["onboarding", "in_chat"];
 // Per-connector "appeal" so some convert much better than others (realistic).
 const APPEAL = {}; Object.keys(CONNECTORS).forEach((id) => (APPEAL[id] = 0.25 + rand() * 0.5));
 
+// Per-(role, connector) fit multiplier for the flywheel (lib/rolefit.js) —
+// built from the SAME seeded rand() sequence, right after APPEAL and before
+// seedBaseline() consumes rand() itself, so the whole seed stays
+// deterministic run-to-run (same principle as the mulberry32(42) seed above).
+const FIT_JITTER = buildFitJitterTable(ROLE_KEYS, Object.keys(CONNECTORS), rand);
+
+// Stable id per event, assigned in push() below — lets the dashboard diff
+// "seen before" vs "new since last poll" for the activity ticker (Task 5/7).
+let nextEventId = 1;
+
 function seedBaseline() {
   const now = Date.now();
   const DAY = 86400000;
@@ -93,13 +104,18 @@ function seedBaseline() {
         for (let i = 0; i < recs; i++) {
           const role = ROLE_KEYS[Math.floor(rand() * ROLE_KEYS.length)];
           push(dayTs, "recommended", id, role, surface);
-          // Walk down the funnel probabilistically.
-          const ctr = 0.55 * APPEAL[id] * surfaceBoost;
+          // Walk down the funnel probabilistically, boosted by how well this
+          // connector fits the role it was recommended to — the flywheel's
+          // seed half (lib/rolefit.js). Clamped so no probability exceeds 1.
+          const fit = roleFit(role, id, ROLES, FIT_JITTER);
+          const ctr = Math.min(1, 0.55 * APPEAL[id] * surfaceBoost * fit);
           if (rand() < ctr) {
             push(dayTs, "clicked", id, role, surface);
-            if (rand() < 0.7) {
+            const signupRate = Math.min(1, 0.7 * fit);
+            if (rand() < signupRate) {
               push(dayTs, "signed_up", id, role, surface);
-              if (rand() < 0.85) {
+              const connectRate = Math.min(1, 0.85 * fit);
+              if (rand() < connectRate) {
                 push(dayTs, "connected", id, role, surface);
                 if (rand() < 0.6) push(dayTs, "activated", id, role, surface);
               }
@@ -111,7 +127,7 @@ function seedBaseline() {
   }
 }
 function push(ts, stage, connectorId, role, surface, live = false) {
-  events.push({ ts, stage, connectorId, role, surface, live });
+  events.push({ id: nextEventId++, ts, stage, connectorId, role, surface, live });
 }
 seedBaseline();
 
