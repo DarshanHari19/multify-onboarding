@@ -12,6 +12,7 @@ import { inferRoleFromText } from "./lib/roleinfer.js";
 import { generateFirstWinTasksLLM } from "./lib/firstwin.js";
 import { cleanDisplayName } from "./lib/displayname.js";
 import { roleFit, buildFitJitterTable } from "./lib/rolefit.js";
+import { roleConnectorRates } from "./lib/affinity.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -265,6 +266,17 @@ app.post("/api/first-win", async (req, res) => {
   } catch (e) {
     return res.json({ tasks: [], error: String(e.message) });
   }
+});
+
+/* ============================ ROLE AFFINITY ===============================
+   Flywheel — how well the event data (seeded + live) justifies a role's
+   curated bundle. Pure aggregation (lib/affinity.js) over the same `events`
+   store metrics/funnel use, scoped to ONE role. Called from app.js right
+   after a role bundle renders (see pickRole -> loadAffinity in app.js). */
+app.get("/api/affinity", (req, res) => {
+  const { role } = req.query;
+  if (!role || !ROLE_KEYS.includes(role)) return res.json({});
+  return res.json(roleConnectorRates(events, role));
 });
 
 /* ============================ EVENT CAPTURE ============================= */
