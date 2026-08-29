@@ -28,13 +28,14 @@
 
   <div class="row" style="margin-top:18px;">
     <span class="badge"><span class="live-dot"></span> Live · aggregate &amp; anonymized — no PII shared</span>
-    <label class="count" style="margin-left:auto;">Partner view:</label>
+    <label class="count" id="partnerLabel" style="margin-left:auto;">Partner view:</label>
     <select class="sel-input" id="connectorFilter"><option value="">All connectors</option></select>
     <select class="sel-input" id="surfaceFilter">
       <option value="">All surfaces</option>
       <option value="onboarding">Onboarding</option>
       <option value="in_chat">In-chat</option>
     </select>
+    <button class="btn ghost hidden" id="exportBtn">Export report</button>
   </div>
 
   <div class="kpis" style="margin-top:16px;">
@@ -42,6 +43,19 @@
     <div class="kpi"><div class="label">Rec → Connected</div><div class="value blue" id="kpiConv">—</div></div>
     <div class="kpi"><div class="label">Activation rate</div><div class="value" id="kpiAct">—</div></div>
     <div class="kpi"><div class="label">Est. lead value</div><div class="value" id="kpiValue">—</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <h2>Live this session</h2>
+      <p class="hint">Your activity this session, live — isolated from the seeded baseline below so a single connect is visible.</p>
+      <div class="live-stats" id="liveStats"></div>
+    </div>
+    <div class="panel">
+      <h2>Suggestion feedback</h2>
+      <p class="hint">Thumbs up/down on suggestions in the recommender — this trains future bundles.</p>
+      <div class="feedback-summary" id="feedbackSummary"></div>
+    </div>
   </div>
 
   <div class="grid2">
@@ -82,7 +96,13 @@
   </div>
 </div>
 
+<!-- Print-only: populated by exportPartnerReport() right before window.print(),
+     hidden on screen (see .partner-report in styles.css) and shown ONLY inside
+     @media print, which also hides everything else in .wrap. -->
+<div id="partnerReport" class="partner-report"></div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="taxonomy.js"></script>
 <script src="dashboard.js"></script>
 </body>
 </html>

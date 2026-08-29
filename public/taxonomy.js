@@ -18,6 +18,13 @@
     megaphone: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" /><path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14" /><path d="M8 6v8" /></svg>',
     compass: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z" /></svg>',
     barChart: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16" /><path d="M18 17V9" /><path d="M13 17V5" /><path d="M8 17v-3" /></svg>',
+    // Consent / feedback / role-inference affordances — no-emoji rule: every
+    // new UI affordance uses an inline SVG from this shared set, never a
+    // glyph. Reused by both index.html (recommender) and dashboard.html.
+    alertTriangle: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>',
+    thumbsUp: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12" /><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z" /></svg>',
+    thumbsDown: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2" /><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88Z" /></svg>',
+    wandSparkles: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z" /><path d="m14 7 3 3" /><path d="M5 6v4" /><path d="M19 14v4" /><path d="M10 2v2" /><path d="M7 8H3" /><path d="M21 16h-4" /><path d="M11 3H9" /></svg>',
   };
 
   // ico: path to a local SVG. Curated brands = real logo (Simple Icons, MIT,
@@ -128,5 +135,43 @@
     { kw: ["team", "notify", "update team", "broadcast"],    ids: ["slack"] },
   ];
 
-  root.TAXONOMY = { CONNECTORS, ROLES, FALLBACK_INTENTS };
+  // "First win" preview (item 1, hybrid): concrete day-one tasks shown right
+  // after Connect, grounded in the specific connectors just enabled. Curated
+  // for the 20 known connectors + a handful of multi-connector combos; any
+  // registry/RAG connector with no entry here falls through to the server's
+  // LLM gap-fill (see lib/firstwin.js + POST /api/first-win).
+  const FIRST_WINS = {
+    hubspot:    ["Pull your 10 stalest deals and draft follow-ups"],
+    salesforce: ["Summarize this week's pipeline changes across your top accounts"],
+    apollo:     ["Find and enrich 20 new leads matching your ICP"],
+    gmail:      ["Draft replies to your 5 oldest unanswered emails"],
+    gcal:       ["Find your next open hour this week and block focus time"],
+    gdrive:     ["Summarize the latest doc your team shared with you"],
+    slack:      ["Post a daily standup summary to your team channel"],
+    notion:     ["Draft a one-pager from your latest meeting notes"],
+    linear:     ["Triage new bugs into this week's sprint"],
+    jira:       ["Summarize open blockers across your active sprint"],
+    github:     ["Summarize open pull requests waiting on your review"],
+    sentry:     ["Turn this week's top production error into a ticket"],
+    vercel:     ["Check the status of your last production deploy"],
+    neon:       ["Query your database for last week's signups"],
+    snowflake:  ["Run a query across last month's revenue by region"],
+    airtable:   ["Pull this week's updated rows from your ops base"],
+    stripe:     ["Summarize this week's failed payments"],
+    asana:      ["List tasks due this week across your projects"],
+    buffer:     ["Draft and schedule 3 social posts for next week"],
+    ga4:        ["Summarize this week's top traffic sources"],
+    __combos: [
+      { ids: ["hubspot", "gmail"],   task: "Pull your 10 stalest HubSpot deals and draft follow-up emails in Gmail" },
+      { ids: ["apollo", "gmail"],    task: "Find 10 new leads on Apollo and draft a personalized cold email in Gmail" },
+      { ids: ["github", "linear"],   task: "Turn your 3 oldest open GitHub issues into Linear tickets" },
+      { ids: ["sentry", "linear"],   task: "Convert this week's top Sentry error into a Linear ticket" },
+      { ids: ["notion", "slack"],    task: "Draft a project update in Notion and post it to Slack" },
+      { ids: ["stripe", "slack"],    task: "Post this week's Stripe revenue summary to Slack" },
+      { ids: ["buffer", "ga4"],      task: "Schedule next week's social posts based on your top GA4 traffic sources" },
+      { ids: ["snowflake", "notion"],task: "Pull last month's revenue query and publish the summary in Notion" },
+    ],
+  };
+
+  root.TAXONOMY = { CONNECTORS, ROLES, FALLBACK_INTENTS, ICONS, FIRST_WINS };
 })(typeof window !== "undefined" ? window : globalThis);

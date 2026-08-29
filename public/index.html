@@ -36,15 +36,15 @@
   <div class="roles" id="roles"></div>
 
   <div class="panel" id="needsPanel">
-    <h2>Anything specific you want to get done? <span class="tag new">optional</span></h2>
-    <p class="hint">Describe it in plain English — a live model maps it to the right connectors and adds them on top of your role bundle. <em>(Falls back to keyword matching if no model key is configured.)</em></p>
-    <textarea class="field" id="needs" rows="2" placeholder="e.g. 'pull stale deals from my CRM and email the prospects' or 'monitor our error rates and file tickets'"></textarea>
+    <h2>Describe yourself or what you want to get done <span class="tag new">optional</span></h2>
+    <p class="hint" id="needsHint">Skip the cards above and just describe it in plain English — a live model infers your role and maps your tools, on top of anything you've already picked. <em>(Falls back to keyword matching if no model key is configured.)</em></p>
+    <textarea class="field" id="needs" rows="2" placeholder="e.g. 'I run growth at a small B2B startup' or 'pull stale deals from my CRM and email the prospects'"></textarea>
     <div class="row">
       <span class="count">Try:</span>
       <span class="chip" onclick="fillNeed('pull stale deals from my CRM and email the prospects')">CRM + outreach</span>
       <span class="chip" onclick="fillNeed('monitor our error rates and file bug tickets')">errors → tickets</span>
       <span class="chip" onclick="fillNeed('schedule social posts and track campaign analytics')">social + analytics</span>
-      <button class="btn" style="margin-left:auto" id="interpretBtn" onclick="interpretNeeds()">Interpret &amp; add</button>
+      <button class="btn" style="margin-left:auto" id="interpretBtn" onclick="interpretNeeds()"></button>
     </div>
     <div class="row"><span class="spin hidden" id="spin">Asking the model…</span></div>
   </div>
@@ -52,6 +52,7 @@
   <div class="panel hidden" id="bundlePanel">
     <h2>Your recommended connectors</h2>
     <p class="hint" id="bundleHint"></p>
+    <div class="retrieval-note hidden" id="retrievalNote"></div>
     <div id="connectors"></div>
     <div class="summary" id="summary"></div>
     <div class="row">
@@ -62,6 +63,15 @@
       Every connector enabled here becomes an <b>account creation with that service</b> — the moment a
       recommendation turns into a <b>qualified lead</b>. Each of these interactions is captured and flows
       into the <b>partner attribution dashboard</b> (linked above) in real time.
+    </div>
+  </div>
+
+  <div class="panel hidden" id="firstWinPanel">
+    <h2>Great — here's what your agent can do on day one:</h2>
+    <p class="hint">Productive from your first message — no setup, no scripting, no waiting.</p>
+    <div id="firstWinTasks"></div>
+    <div class="row">
+      <button class="btn ghost" onclick="resetAll()">Start over</button>
     </div>
   </div>
 </div>

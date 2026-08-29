@@ -24,7 +24,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_PATH = path.join(__dirname, "..", "data", "catalog.json");
 const REGISTRY_BASE = "https://registry.modelcontextprotocol.io/v0/servers";
 const PAGE_LIMIT = 100;
-const MIN_DESCRIPTION_LENGTH = 15;
+const MIN_DESCRIPTION_LENGTH = 25;
+const MIN_DESCRIPTION_WORDS = 4;
 
 // Obvious placeholder/test servers — conservative, whole-token match so we
 // don't accidentally drop something like "sample-data-connector" that's real.
@@ -35,6 +36,54 @@ function isJunk(server) {
   if (JUNK_NAME_RE.test(server.name)) return true;
   if (server.title && JUNK_NAME_RE.test(server.title)) return true;
   return false;
+}
+
+// A title that's just a bare category word with no product identity — e.g.
+// "CRM" — is exactly the junk a quality gate should drop, even with a
+// legitimate description. Whole-string match only, so a real product name
+// that happens to CONTAIN a generic word ("HubSpot CRM", "Email Wizard") is
+// never penalized.
+const GENERIC_TITLES = new Set([
+  "crm", "email", "mail", "api", "server", "tool", "assistant", "agent",
+  "bot", "service", "app", "platform", "system", "dashboard", "integration",
+  "connector", "client", "sdk", "plugin", "extension", "widget", "mcp",
+  "database", "analytics",
+]);
+export function isGenericTitle(title) {
+  return GENERIC_TITLES.has((title || "").trim().toLowerCase());
+}
+
+// Length alone lets through padded-but-empty descriptions ("word word word
+// word word."); also require a minimum number of real words.
+export function isThinDescription(description) {
+  const d = (description || "").trim();
+  if (d.length < MIN_DESCRIPTION_LENGTH) return true;
+  if (d.split(/\s+/).filter(Boolean).length < MIN_DESCRIPTION_WORDS) return true;
+  return false;
+}
+
+// Multiple registry mirrors (smithery, github, etc.) often republish the same
+// underlying repo — sometimes with a beta/alpha variant too. Collapse those
+// to one entry, preferring a real (non-raw-name) title, then a non-beta
+// version, then the longer/more descriptive one.
+const PRERELEASE_RE = /beta|alpha|canary|nightly|-rc\d*$/i;
+function isBetterCatalogEntry(a, b) {
+  const aReal = a.title !== a.name, bReal = b.title !== b.name;
+  if (aReal !== bReal) return aReal;
+  const aPre = PRERELEASE_RE.test(a.name), bPre = PRERELEASE_RE.test(b.name);
+  if (aPre !== bPre) return !aPre;
+  return (a.description?.length || 0) > (b.description?.length || 0);
+}
+export function dedupeByRepo(catalogEntries) {
+  const byRepo = new Map();
+  const noRepo = [];
+  for (const entry of catalogEntries) {
+    if (!entry.repoUrl) { noRepo.push(entry); continue; }
+    const key = entry.repoUrl.toLowerCase();
+    const existing = byRepo.get(key);
+    if (!existing || isBetterCatalogEntry(entry, existing)) byRepo.set(key, entry);
+  }
+  return [...byRepo.values(), ...noRepo];
 }
 
 // Stable id derived from the registry's own stable key (`name`), not array
@@ -75,20 +124,22 @@ function qualityGate(entries) {
     byName.set(entry.server.name, entry);
   }
 
-  // 2. Filter: active status, real description, not an obvious placeholder.
+  // 2. Filter: active status, real description, not an obvious placeholder,
+  //    not a bare generic title ("CRM" with no product identity).
   const kept = [];
-  let droppedDeprecated = 0, droppedNoDesc = 0, droppedJunk = 0;
+  let droppedDeprecated = 0, droppedNoDesc = 0, droppedJunk = 0, droppedGeneric = 0;
   for (const entry of byName.values()) {
     const s = entry.server;
     const meta = entry._meta["io.modelcontextprotocol.registry/official"];
     if (meta.status !== "active") { droppedDeprecated++; continue; }
-    if (!s.description || s.description.trim().length < MIN_DESCRIPTION_LENGTH) { droppedNoDesc++; continue; }
+    if (isThinDescription(s.description)) { droppedNoDesc++; continue; }
     if (isJunk(s)) { droppedJunk++; continue; }
+    if (isGenericTitle(s.title)) { droppedGeneric++; continue; }
     kept.push(s);
   }
 
   console.log(`  Deduped to ${byName.size} latest versions.`);
-  console.log(`  Dropped: ${droppedDeprecated} deprecated, ${droppedNoDesc} no/short description, ${droppedJunk} junk-pattern.`);
+  console.log(`  Dropped: ${droppedDeprecated} deprecated, ${droppedNoDesc} thin description, ${droppedJunk} junk-pattern, ${droppedGeneric} generic title.`);
   return kept;
 }
 
@@ -111,7 +162,9 @@ async function main() {
   console.log(`Fetched ${raw.length} total (name, version) entries.`);
 
   const gated = qualityGate(raw);
-  const catalog = gated.map(toCatalogEntry);
+  const beforeDedupe = gated.length;
+  const catalog = dedupeByRepo(gated.map(toCatalogEntry));
+  console.log(`  Deduped ${beforeDedupe - catalog.length} repo-duplicate republishes (e.g. registry mirrors, beta variants).`);
 
   // Guard against id collisions (extremely unlikely with a 12-hex-char sha1
   // prefix, but cheap to check).
@@ -130,7 +183,12 @@ async function main() {
   console.log(`Next: npm run build-index`);
 }
 
-main().catch((err) => {
-  console.error("Ingest failed:", err);
-  process.exit(1);
-});
+// Guarded so `import { isGenericTitle, ... } from "./ingest.js"` in tests
+// never triggers a live registry fetch — only `node scripts/ingest.js` /
+// `npm run ingest` runs main().
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error("Ingest failed:", err);
+    process.exit(1);
+  });
+}

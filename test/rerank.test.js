@@ -39,13 +39,13 @@ test("validatePicks drops ids outside the retrieved-candidate set (anti-hallucin
   ]);
 });
 
-test("validatePicks dedupes and caps at 6", () => {
+test("validatePicks dedupes and caps at 4 (fewer, higher-confidence picks)", () => {
   const ids = Array.from({ length: 10 }, (_, i) => `id-${i}`);
   const candidateIds = new Set(ids);
   const picks = [...ids.map((id) => ({ id, why: "" })), { id: "id-0", why: "dup" }]; // trailing dup
   const result = validatePicks(picks, candidateIds);
-  assert.equal(result.length, 6);
-  assert.deepEqual(result.map((p) => p.id), ["id-0", "id-1", "id-2", "id-3", "id-4", "id-5"]);
+  assert.equal(result.length, 4);
+  assert.deepEqual(result.map((p) => p.id), ["id-0", "id-1", "id-2", "id-3"]);
 });
 
 test("validatePicks preserves the model's why text, defaulting to empty string", () => {

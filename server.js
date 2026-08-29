@@ -6,6 +6,11 @@ import { fileURLToPath } from "node:url";
 import { loadRagData, retrieveCandidates } from "./lib/rag.js";
 import { warmupEmbedder } from "./lib/embedder.js";
 import { rerankWithLLM } from "./lib/rerank.js";
+import { isSensitive } from "./lib/sensitivity.js";
+import { summarizeFeedback } from "./lib/feedback.js";
+import { inferRoleFromText } from "./lib/roleinfer.js";
+import { generateFirstWinTasksLLM } from "./lib/firstwin.js";
+import { cleanDisplayName } from "./lib/displayname.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -43,14 +48,20 @@ const embedderReady = RAG ? warmupEmbedder() : Promise.resolve(null);
 // exist. This is what makes a RAG-surfaced connector's funnel events record
 // and render instead of being silently dropped or crashing the metrics table.
 const DISPLAY = {};
-if (RAG) for (const [id, s] of RAG.catalogById) DISPLAY[id] = { name: s.title, ico: "icons/plug.svg" };
+if (RAG) for (const [id, s] of RAG.catalogById) DISPLAY[id] = { name: cleanDisplayName(s), ico: "icons/plug.svg" };
 for (const [id, c] of Object.entries(CONNECTORS)) DISPLAY[id] = { name: c.name, ico: c.ico };
 
 /* ============================ EVENT STORE ================================
    Funnel stages, in order. Everything is an in-memory event:
-   { ts, stage, connectorId, role, surface }
-   Seeded with realistic baseline data on boot; live events append on top. */
+   { ts, stage, connectorId, role, surface, live }
+   Seeded with realistic baseline data on boot (live:false); live events
+   posted from the running app append on top (live:true) — see `live` below,
+   which lets the dashboard show "this session" movement distinct from the
+   large seeded baseline. Thumbs up/down are a SEPARATE feedback event type,
+   not a funnel stage — kept out of STAGES so they never render as a funnel
+   bar or get counted toward conversion. */
 const STAGES = ["recommended", "clicked", "signed_up", "connected", "activated"];
+const FEEDBACK_STAGES = ["feedback_up", "feedback_down"];
 const events = [];
 
 // Deterministic RNG so the seeded baseline looks the same every run.
@@ -99,10 +110,28 @@ function seedBaseline() {
     }
   }
 }
-function push(ts, stage, connectorId, role, surface) {
-  events.push({ ts, stage, connectorId, role, surface });
+function push(ts, stage, connectorId, role, surface, live = false) {
+  events.push({ ts, stage, connectorId, role, surface, live });
 }
 seedBaseline();
+
+// ILLUSTRATIVE, like the rest of the seeded baseline — a handful of thumbs
+// up/down per connector so the feedback panel isn't empty on first load.
+// live:false (default): these are backdrop, not "this session"'s activity.
+function seedFeedback() {
+  const now = Date.now(), DAY = 86400000;
+  for (const id of Object.keys(CONNECTORS)) {
+    const upN = Math.round(rand() * 8 * APPEAL[id]);
+    const downN = Math.round(rand() * 3 * (1 - APPEAL[id]));
+    for (let i = 0; i < upN + downN; i++) {
+      const role = ROLE_KEYS[Math.floor(rand() * ROLE_KEYS.length)];
+      const surface = SURFACES[Math.floor(rand() * SURFACES.length)];
+      const ts = now - Math.floor(rand() * 13 * DAY);
+      push(ts, i < upN ? "feedback_up" : "feedback_down", id, role, surface);
+    }
+  }
+}
+seedFeedback();
 
 /* ============================ FREE-TEXT RECOMMEND =========================
    Full-registry RAG: embed query -> cosine top-25 over data/catalog.json ->
@@ -128,14 +157,20 @@ function curatedConnectorPayload(ids) {
 }
 
 function ragConnectorPayload(entry, why) {
+  const cat = entry.installKind === "remote" ? "Remote MCP" : "MCP Server";
+  const name = cleanDisplayName(entry);
   return {
     id: entry.id,
-    name: entry.title,
+    name,
     ico: "icons/plug.svg",
-    cat: entry.installKind === "remote" ? "Remote MCP" : "MCP Server",
+    cat,
     desc: entry.description,
     why,
     suggested: true, // risk gate: RAG results never auto-enable
+    // Consent gate (RAG results only, locked decision — curated bundles
+    // untouched): flag finance/email-touching connectors so the client can
+    // show an explicit opt-in instead of a bare toggle.
+    sensitive: isSensitive({ name, cat, desc: entry.description }),
   };
 }
 
@@ -157,7 +192,9 @@ app.post("/api/recommend", async (req, res) => {
 
     // No picks (timeout/error/empty) -> raw vector top-hits, so free-text
     // always returns something real and fast instead of hanging or going empty.
-    const picks = result?.picks?.length ? result.picks : candidates.slice(0, 6).map((c) => ({ id: c.id, why: "" }));
+    // Vector fallback is already sorted by retrieval score (see topK) —
+    // slicing to 4 is "top 4 by score", matching the LLM path's MAX_PICKS.
+    const picks = result?.picks?.length ? result.picks : candidates.slice(0, 4).map((c) => ({ id: c.id, why: "" }));
     const byId = new Map(candidates.map((c) => [c.id, c]));
     const connectors = picks.map((p) => ragConnectorPayload(byId.get(p.id), p.why));
 
@@ -176,13 +213,53 @@ app.post("/api/recommend", async (req, res) => {
   }
 });
 
+/* ============================ ROLE INFERENCE ==============================
+   Lets a user skip the role-picker grid and just describe themselves — the
+   LLM infers one of the six curated ROLES, validated against that exact key
+   set (anti-hallucination gate, same pattern as the recommend re-rank).
+   Graceful fallback: no RAG/key/timeout/no-match -> { role: null } so the
+   client falls through to the existing plain free-text (RAG-only) path. */
+app.post("/api/infer-role", async (req, res) => {
+  const { text } = req.body || {};
+  if (!text || !text.trim() || !OPENROUTER_API_KEY) return res.json({ role: null });
+  try {
+    const result = await inferRoleFromText(text, ROLES, { apiKey: OPENROUTER_API_KEY, model: OPENROUTER_MODEL });
+    if (!result) return res.json({ role: null });
+    return res.json({ role: result.role, title: ROLES[result.role].title });
+  } catch (e) {
+    return res.json({ role: null, error: String(e.message) });
+  }
+});
+
+/* ============================ FIRST-WIN GAP-FILL ==========================
+   Hybrid (locked decision): the client builds the "day one" task card from
+   curated FIRST_WINS templates first (lib/firstwin.js buildFirstWinTasks, no
+   network call). Only when that produces nothing — the enabled set is all
+   registry/RAG connectors with no template — does it call here for an LLM
+   fill, so the common curated-role demo path never makes an extra LLM call
+   at the post-connect climax. */
+app.post("/api/first-win", async (req, res) => {
+  const { connectors } = req.body || {};
+  if (!Array.isArray(connectors) || !connectors.length || !OPENROUTER_API_KEY) {
+    return res.json({ tasks: [] });
+  }
+  try {
+    const tasks = await generateFirstWinTasksLLM(connectors, { apiKey: OPENROUTER_API_KEY, model: OPENROUTER_MODEL });
+    return res.json({ tasks: tasks || [] });
+  } catch (e) {
+    return res.json({ tasks: [], error: String(e.message) });
+  }
+});
+
 /* ============================ EVENT CAPTURE ============================= */
 app.post("/api/events", (req, res) => {
   const batch = Array.isArray(req.body) ? req.body : [req.body];
   let n = 0;
   for (const e of batch) {
-    if (!e || !STAGES.includes(e.stage) || !DISPLAY[e.connectorId]) continue;
-    push(Date.now(), e.stage, e.connectorId, e.role || "unknown", e.surface || "onboarding");
+    if (!e || (!STAGES.includes(e.stage) && !FEEDBACK_STAGES.includes(e.stage)) || !DISPLAY[e.connectorId]) continue;
+    // live:true — this event came from a real click just now, distinct from
+    // the seeded baseline (seedBaseline never passes this arg, so it's false).
+    push(Date.now(), e.stage, e.connectorId, e.role || "unknown", e.surface || "onboarding", true);
     n++;
   }
   res.json({ ok: true, recorded: n });
@@ -200,12 +277,19 @@ app.get("/api/metrics", (req, res) => {
   );
 
   const funnel = Object.fromEntries(STAGES.map((s) => [s, 0]));
+  const liveSummary = Object.fromEntries(STAGES.map((s) => [s, 0]));
   const byRole = {}, bySurface = {}, byConnector = {};
   const DAY = 86400000, now = Date.now();
   const series = {}; // dayIndex -> signed_up count (the "leads" line)
 
   for (const e of rows) {
+    // feedback_up/feedback_down are a separate event type, not a funnel
+    // stage (see FEEDBACK_STAGES) — skip them here, summarized below instead.
+    if (!STAGES.includes(e.stage)) continue;
     funnel[e.stage]++;
+    // "Live this session" — the seeded baseline never sets live:true, so this
+    // isolates a demo user's own clicks from the ~8k-event backdrop.
+    if (e.live) liveSummary[e.stage]++;
     if (e.stage === "signed_up") {
       (byRole[e.role] ||= { signed_up: 0 }).signed_up++;
       (bySurface[e.surface] ||= { recommended: 0, signed_up: 0 }).signed_up++;
@@ -243,6 +327,10 @@ app.get("/api/metrics", (req, res) => {
     bySurface,
     connectorTable,
     series: seriesArr,
+    // This session's own activity, isolated from the seeded baseline — see
+    // the `live` flag on events. Same filters as everything else above.
+    liveSummary,
+    feedback: summarizeFeedback(rows),
     // Filter-dropdown options: only connectors with actual events, not the
     // full registry — keeps the dropdown usable while still covering any
     // RAG-surfaced connector a demo actually connects.
