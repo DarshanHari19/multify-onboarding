@@ -64,6 +64,15 @@ h1 { font-family: 'Krona One', sans-serif; font-weight: 400; font-size: 26px; ma
 .conn .meta .name { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .conn .meta .why { color: var(--muted); font-size: 12.5px; margin-top: 3px; line-height: 1.4; }
 .conn .meta .affinity-cue { color: var(--muted); font-size: 11.5px; margin-top: 4px; }
+
+.conn-name-btn { background: none; border: none; padding: 0; margin: 0; font: inherit; font-weight: 600; color: var(--text); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.conn-name-btn:hover { text-decoration: underline; }
+.info-dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--muted); color: var(--muted); font-size: 10px; font-style: italic; font-family: Georgia, serif; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.conn-popover { margin-top: 8px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--border); font-size: 12.5px; animation: fadein .15s ease; }
+.conn-popover p { margin: 0 0 8px; color: var(--muted); line-height: 1.4; }
+.conn-popover .links { display: flex; gap: 14px; }
+.conn-popover .links a { color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
+.conn-popover .links a:hover { color: var(--text); }
 .tag { font-size: 10.5px; padding: 2px 7px; border-radius: 99px; border: 1px solid var(--border); color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
 .tag.new { color: var(--text); border-color: var(--border); }
 .tag.llm { color: var(--green); border-color: var(--green); }
@@ -83,9 +92,7 @@ h1 { font-family: 'Krona One', sans-serif; font-weight: 400; font-size: 26px; ma
 .feedback { display: flex; gap: 4px; flex: none; }
 .fbtn { width: 30px; height: 30px; padding: 0; border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 0; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all .15s; }
 .fbtn svg { width: 15px; height: 15px; display: block; }
-.fbtn:hover:not(:disabled) { color: var(--text); border-color: var(--text); }
-.fbtn:disabled { cursor: default; }
-.fbtn:disabled:not(.chosen) { opacity: .35; }
+.fbtn:hover { color: var(--text); border-color: var(--text); }
 .fbtn.chosen[data-dir="up"] { color: var(--green); border-color: var(--green); opacity: 1; }
 .fbtn.chosen[data-dir="down"] { color: var(--red); border-color: var(--red); opacity: 1; }
 
@@ -109,21 +116,23 @@ button.btn:disabled { opacity: .45; cursor: not-allowed; }
 .chip { font-size: 12px; padding: 5px 10px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); cursor: pointer; }
 .chip:hover { border-color: var(--text); color: var(--text); }
 .spin { font-size: 12px; color: var(--muted); }
-.retrieval-note { font-size: 12px; color: var(--muted); margin-bottom: 12px; padding: 8px 12px; background: var(--panel-2); border: 1px solid var(--border); animation: fadein .25s ease; }
-.retrieval-note b { color: var(--text); }
+.retrieval-note { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-bottom: 12px; padding: 9px 12px; background: var(--panel-2); border: 1px solid var(--border); animation: fadein .25s ease; }
+.retrieval-note b { color: var(--text); font-family: 'Krona One', sans-serif; font-weight: 400; font-size: 13px; }
+.retrieval-note .rarrow { color: var(--border); }
 @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
 
 .firstwin-task { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border: 1px solid var(--border); background: var(--panel-2); margin-bottom: 10px; font-size: 14px; line-height: 1.5; }
 .firstwin-task::before { content: "→"; color: var(--green); font-weight: 700; flex: none; }
 
 /* dashboard */
-.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 6px; }
+.kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 6px; }
 @media (max-width: 720px) { .kpis { grid-template-columns: 1fr 1fr; } }
 .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 0; padding: 16px; }
 .kpi .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .6px; }
 .kpi .value { font-family: 'Krona One', sans-serif; font-weight: 400; font-size: 24px; margin-top: 8px; }
 .kpi .value.green { color: var(--green); }
 .kpi .value.blue { color: var(--text); }
+.kpi-caption { color: var(--muted); font-size: 11px; margin-top: 5px; line-height: 1.35; }
 
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
 @media (max-width: 820px) { .grid2 { grid-template-columns: 1fr; } }
@@ -147,6 +156,17 @@ td.num, th.num { text-align: right; }
 select.sel-input { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 0; padding: 8px 12px; font-size: 13px; font-family: inherit; }
 .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 0 rgba(34,197,94,.6); animation: pulse 1.8s infinite; display: inline-block; }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,.5); } 70% { box-shadow: 0 0 0 8px rgba(34,197,94,0); } 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); } }
+
+/* Internal live-ops block (Live this session + Activity) — visually distinct
+   from the partner-facing aggregate panels: dashed amber border + an
+   "Internal" chip, so it never reads as part of the "aggregate & anonymized"
+   partner view. Excluded from the partner export entirely (see
+   exportPartnerReport() in dashboard.js and @media print below). */
+.liveops-panel { border-style: dashed; border-color: var(--amber); }
+.liveops-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.liveops-head h2 { margin: 0; }
+.chip-internal { font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--amber); border: 1px solid var(--amber); border-radius: 99px; padding: 2px 9px; }
+.liveops-panel .activity-feed { margin-top: 16px; }
 
 .live-stats { display: flex; gap: 28px; flex-wrap: wrap; }
 .live-stat { display: flex; flex-direction: column; gap: 4px; }
