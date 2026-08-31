@@ -11,6 +11,8 @@ import { summarizeFeedback } from "./lib/feedback.js";
 import { inferRoleFromText } from "./lib/roleinfer.js";
 import { generateFirstWinTasksLLM } from "./lib/firstwin.js";
 import { cleanDisplayName } from "./lib/displayname.js";
+import { roleFit, buildFitJitterTable } from "./lib/rolefit.js";
+import { roleConnectorRates } from "./lib/affinity.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -80,6 +82,16 @@ const SURFACES = ["onboarding", "in_chat"];
 // Per-connector "appeal" so some convert much better than others (realistic).
 const APPEAL = {}; Object.keys(CONNECTORS).forEach((id) => (APPEAL[id] = 0.25 + rand() * 0.5));
 
+// Per-(role, connector) fit multiplier for the flywheel (lib/rolefit.js) —
+// built from the SAME seeded rand() sequence, right after APPEAL and before
+// seedBaseline() consumes rand() itself, so the whole seed stays
+// deterministic run-to-run (same principle as the mulberry32(42) seed above).
+const FIT_JITTER = buildFitJitterTable(ROLE_KEYS, Object.keys(CONNECTORS), rand);
+
+// Stable id per event, assigned in push() below — lets the dashboard diff
+// "seen before" vs "new since last poll" for the activity ticker (Task 5/7).
+let nextEventId = 1;
+
 function seedBaseline() {
   const now = Date.now();
   const DAY = 86400000;
@@ -89,17 +101,22 @@ function seedBaseline() {
       // onboarding converts materially better than in-chat — the core thesis.
       for (const surface of SURFACES) {
         const surfaceBoost = surface === "onboarding" ? 1.6 : 1.0;
-        const recs = Math.round((3 + rand() * 9));
+        const recs = Math.round((5 + rand() * 11));
         for (let i = 0; i < recs; i++) {
           const role = ROLE_KEYS[Math.floor(rand() * ROLE_KEYS.length)];
           push(dayTs, "recommended", id, role, surface);
-          // Walk down the funnel probabilistically.
-          const ctr = 0.55 * APPEAL[id] * surfaceBoost;
+          // Walk down the funnel probabilistically, boosted by how well this
+          // connector fits the role it was recommended to — the flywheel's
+          // seed half (lib/rolefit.js). Clamped so no probability exceeds 1.
+          const fit = roleFit(role, id, ROLES, FIT_JITTER);
+          const ctr = Math.min(1, 0.55 * APPEAL[id] * surfaceBoost * fit);
           if (rand() < ctr) {
             push(dayTs, "clicked", id, role, surface);
-            if (rand() < 0.7) {
+            const signupRate = Math.min(1, 0.7 * fit);
+            if (rand() < signupRate) {
               push(dayTs, "signed_up", id, role, surface);
-              if (rand() < 0.85) {
+              const connectRate = Math.min(1, 0.85 * fit);
+              if (rand() < connectRate) {
                 push(dayTs, "connected", id, role, surface);
                 if (rand() < 0.6) push(dayTs, "activated", id, role, surface);
               }
@@ -111,7 +128,7 @@ function seedBaseline() {
   }
 }
 function push(ts, stage, connectorId, role, surface, live = false) {
-  events.push({ ts, stage, connectorId, role, surface, live });
+  events.push({ id: nextEventId++, ts, stage, connectorId, role, surface, live });
 }
 seedBaseline();
 
@@ -251,6 +268,17 @@ app.post("/api/first-win", async (req, res) => {
   }
 });
 
+/* ============================ ROLE AFFINITY ===============================
+   Flywheel — how well the event data (seeded + live) justifies a role's
+   curated bundle. Pure aggregation (lib/affinity.js) over the same `events`
+   store metrics/funnel use, scoped to ONE role. Called from app.js right
+   after a role bundle renders (see pickRole -> loadAffinity in app.js). */
+app.get("/api/affinity", (req, res) => {
+  const { role } = req.query;
+  if (!role || !ROLE_KEYS.includes(role)) return res.json({});
+  return res.json(roleConnectorRates(events, role));
+});
+
 /* ============================ EVENT CAPTURE ============================= */
 app.post("/api/events", (req, res) => {
   const batch = Array.isArray(req.body) ? req.body : [req.body];
@@ -316,6 +344,22 @@ app.get("/api/metrics", (req, res) => {
   const seriesArr = [];
   for (let d = 13; d >= 0; d--) seriesArr.push({ day: d, leads: series[d] || 0 });
 
+  // Last 10 live (this-session) funnel events, newest first — the activity
+  // ticker that pairs with liveSummary's counter (see dashboard.js
+  // renderActivity). Feedback events are excluded, same as the funnel above.
+  const recentLive = rows
+    .filter((e) => STAGES.includes(e.stage) && e.live)
+    .slice(-10)
+    .reverse()
+    .map((e) => ({
+      id: e.id,
+      stage: e.stage,
+      connectorId: e.connectorId,
+      name: DISPLAY[e.connectorId].name,
+      ico: DISPLAY[e.connectorId].ico,
+      ts: e.ts,
+    }));
+
   res.json({
     generatedAt: now,
     funnel,
@@ -330,6 +374,7 @@ app.get("/api/metrics", (req, res) => {
     // This session's own activity, isolated from the seeded baseline — see
     // the `live` flag on events. Same filters as everything else above.
     liveSummary,
+    recentLive,
     feedback: summarizeFeedback(rows),
     // Filter-dropdown options: only connectors with actual events, not the
     // full registry — keeps the dropdown usable while still covering any
