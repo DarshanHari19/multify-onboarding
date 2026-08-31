@@ -10,6 +10,11 @@ let reasons = {};   // id -> why
 let extraMeta = {}; // id -> {name, ico, cat, desc} for ids not in TAXONOMY.CONNECTORS
                      // (RAG/registry connectors — the /api/recommend payload carries
                      // their display metadata since they aren't in the curated catalog)
+let source = {};     // id -> "role" | "text" — lets pickRole() replace only its
+                      // own previous picks on a role switch without touching
+                      // anything the free-text layer added (and vice versa).
+let feedbackChoice = {}; // id -> "up" | "down" | null — lets a thumbs vote be changed/undone
+let infoOpen = {}; // id -> bool — whether a RAG card's click-to-expand info panel is open
 function displayFor(id) { return CONNECTORS[id] || extraMeta[id]; }
 const SURFACE = "onboarding"; // this whole flow is the onboarding surface
 
@@ -51,19 +56,31 @@ function renderRoles() {
 }
 
 function pickRole(key) {
+  if (selectedRole === key) return; // already on this role — no-op, not a re-recommend
   selectedRole = key;
   const r = ROLES[key];
-  present = r.bundle.map((b) => b.id);
-  enabled = {}; reasons = {};
-  r.bundle.forEach((b) => { enabled[b.id] = b.auto; reasons[b.id] = b.why; });
+  // Additive: drop only ids this function added for a *previous* role, so
+  // anything the free-text layer contributed survives a role switch. An id
+  // already present (e.g. matched by both) keeps its existing enabled/why
+  // rather than being clobbered back to the bundle default.
+  present = present.filter((id) => source[id] !== "role");
+  const newIds = [];
+  r.bundle.forEach((b) => {
+    if (!present.includes(b.id)) {
+      present.push(b.id);
+      enabled[b.id] = b.auto;
+      newIds.push(b.id);
+    }
+    reasons[b.id] = b.why;
+    source[b.id] = "role";
+  });
   $("bundlePanel").classList.remove("hidden");
   $("s3").classList.add("active");
   $("bundleHint").innerHTML = `Curated for <b>${r.title}</b>. Auto-enabled ones are on by default — toggle any off, or add more below.`;
-  renderRetrievalNote({});
   affinity = {};
   loadAffinity(key);
   renderRoles(); renderConnectors();
-  trackMany("recommended", present); // the whole bundle was recommended
+  if (newIds.length) trackMany("recommended", newIds); // only genuinely new recommendations
   $("bundlePanel").scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
@@ -75,6 +92,7 @@ function addConnector(id, why, suggested, meta) {
     // RAG) starts OFF — only hand-curated role-bundle entries auto-enable.
     enabled[id] = !suggested;
     reasons[id] = why || "Matched from what you described";
+    source[id] = "text";
     track("recommended", id);
   }
   // Already present (e.g. from the role bundle) — don't force its toggle;
@@ -100,22 +118,36 @@ function renderConnectors() {
     const aff = affinity[id];
     const inBundle = selectedRole && ROLES[selectedRole].bundle.some((b) => b.id === id);
     const showCue = inBundle && aff && aff.n >= AFFINITY_MIN_N;
+    // RAG/registry results only (curated bundle entries carry no links) —
+    // clickable name reveals the registry description + provenance links,
+    // mirroring Multify's own "click an MCP to see its detail" pattern
+    // instead of dumping an AI-written description on every card by default.
+    const hasInfo = !!(k.websiteUrl || k.repoUrl);
+    const infoIsOpen = hasInfo && !!infoOpen[id];
     const row = document.createElement("div");
     row.className = "conn" + (needsConsent ? " needs-consent" : "");
     row.innerHTML = `
       <div class="ico"><img src="${k.ico}" alt="" /></div>
       <div class="meta">
-        <div class="name">${k.name}
+        <div class="name">
+          ${hasInfo ? `<button class="conn-name-btn" type="button">${k.name}<span class="info-dot">i</span></button>` : k.name}
           <span class="tag">${k.cat}</span>
           ${k.isNew ? '<span class="tag new">new · remote MCP</span>' : ""}
         </div>
         <div class="why">${reasons[id] || ""}</div>
         ${showCue ? `<div class="affinity-cue">${Math.round(aff.rate * 100)}% of ${ROLES[selectedRole].title} users who saw this connected it · based on connection data, illustrative</div>` : ""}
         ${needsConsent ? `<div class="consent"><span class="consent-icon">${ICONS.alertTriangle}</span>${CONSENT_COPY[k.sensitive]} — enable?</div>` : ""}
+        ${hasInfo ? `<div class="conn-popover${infoIsOpen ? "" : " hidden"}">
+          ${k.desc ? `<p>${k.desc}</p>` : ""}
+          <div class="links">
+            ${k.websiteUrl ? `<a href="${k.websiteUrl}" target="_blank" rel="noopener noreferrer">Official website</a>` : ""}
+            ${k.repoUrl ? `<a href="${k.repoUrl}" target="_blank" rel="noopener noreferrer">Setup docs</a>` : ""}
+          </div>
+        </div>` : ""}
       </div>
       <div class="feedback" title="This trains your bundles">
-        <button class="fbtn" data-dir="up" aria-label="Good suggestion">${ICONS.thumbsUp}</button>
-        <button class="fbtn" data-dir="down" aria-label="Not useful">${ICONS.thumbsDown}</button>
+        <button class="fbtn${feedbackChoice[id] === "up" ? " chosen" : ""}" data-dir="up" aria-label="Good suggestion">${ICONS.thumbsUp}</button>
+        <button class="fbtn${feedbackChoice[id] === "down" ? " chosen" : ""}" data-dir="down" aria-label="Not useful">${ICONS.thumbsDown}</button>
       </div>
       ${needsConsent
         ? `<button class="btn ghost consent-btn">Enable</button>`
@@ -125,11 +157,18 @@ function renderConnectors() {
     } else {
       row.querySelector(".toggle").onclick = () => { enabled[id] = !enabled[id]; renderConnectors(); };
     }
+    if (hasInfo) {
+      row.querySelector(".conn-name-btn").onclick = () => { infoOpen[id] = !infoOpen[id]; renderConnectors(); };
+    }
     row.querySelectorAll(".fbtn").forEach((btn) => {
       btn.onclick = () => {
-        track(btn.dataset.dir === "up" ? "feedback_up" : "feedback_down", id);
-        row.querySelectorAll(".fbtn").forEach((b) => (b.disabled = true));
-        btn.classList.add("chosen");
+        const dir = btn.dataset.dir;
+        // Clicking the currently-chosen direction retracts the vote;
+        // clicking the other one switches it — always re-clickable, never
+        // permanently locked.
+        feedbackChoice[id] = feedbackChoice[id] === dir ? null : dir;
+        if (feedbackChoice[id]) track(dir === "up" ? "feedback_up" : "feedback_down", id);
+        renderConnectors();
       };
     });
     c.appendChild(row);
@@ -171,7 +210,7 @@ async function interpretNeeds() {
       } catch (e) { /* inference failed — fall through to the plain free-text path */ }
     }
     if (!selectedRole) {
-      present = []; enabled = {}; reasons = {};
+      present = []; enabled = {}; reasons = {}; source = {};
       $("bundlePanel").classList.remove("hidden");
       $("bundleHint").innerHTML = "Based on what you described:";
     }
@@ -187,7 +226,10 @@ async function interpretNeeds() {
       $("bundleHint").innerHTML = "Couldn't map that to a connector — try naming a tool or task type.";
     } else {
       connectors.forEach((c) =>
-        addConnector(c.id, c.why, c.suggested, { name: c.name, ico: c.ico, cat: c.cat, desc: c.desc, sensitive: c.sensitive || null })
+        addConnector(c.id, c.why, c.suggested, {
+          name: c.name, ico: c.ico, cat: c.cat, desc: c.desc, sensitive: c.sensitive || null,
+          websiteUrl: c.websiteUrl || null, repoUrl: c.repoUrl || null,
+        })
       );
     }
     renderRetrievalNote(data);
@@ -207,7 +249,13 @@ async function interpretNeeds() {
 function renderRetrievalNote(data) {
   const el = $("retrievalNote");
   if (data.source && data.source.startsWith("rag") && typeof data.searched === "number") {
-    el.innerHTML = `Searched <b>${data.searched.toLocaleString()}</b> connectors → <b>${data.candidatesCount}</b> candidates → selected <b>${data.picked}</b> · via ${data.model}`;
+    el.innerHTML = `
+      <span>${data.searched.toLocaleString()} connectors searched</span>
+      <span class="rarrow">→</span>
+      <span>${data.candidatesCount} candidates</span>
+      <span class="rarrow">→</span>
+      <span><b>${data.picked}</b> selected</span>
+    `;
     el.classList.remove("hidden");
   } else {
     el.innerHTML = "";
@@ -219,6 +267,7 @@ function fillNeed(s) { $("needs").value = s; }
 
 function resetAll() {
   selectedRole = null; enabled = {}; present = []; reasons = {}; extraMeta = {}; affinity = {};
+  source = {}; feedbackChoice = {}; infoOpen = {};
   $("needs").value = "";
   $("bundlePanel").classList.add("hidden");
   $("firstWinPanel").classList.add("hidden");

@@ -19,7 +19,11 @@ const ACTIVITY_VERB = {
   activated: "activated",
 };
 let lastActivityIds = new Set(); // previous poll's recentLive ids, to pulse only new rows
-const LEAD_VALUE = 12; // illustrative $ per net-new lead
+// illustrative $ per net-new lead — kept only for the partner PDF export
+// (exportPartnerReport(), explicitly labeled "illustrative" there); dropped
+// from the live on-screen KPIs since it read as a real number next to two
+// actually-computed metrics with no such caveat.
+const LEAD_VALUE = 12;
 let trendChart = null;
 let filtersInit = false;
 let lastLive = null; // previous liveSummary, to detect an increase and pulse it
@@ -58,7 +62,6 @@ async function load() {
   $("kpiLeads").textContent = fmtNum(m.netNewLeads);
   $("kpiConv").textContent = fmtPct(m.conversionOverall);
   $("kpiAct").textContent = fmtPct(m.activationRate);
-  $("kpiValue").textContent = "$" + fmtNum(m.netNewLeads * LEAD_VALUE);
 
   renderFunnel(m.funnel, m.stages);
   renderTrend(m.series);
@@ -83,11 +86,16 @@ function renderLiveStats(liveSummary) {
 
 function relativeTime(ts) {
   const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-  if (diffSec < 30) return "just now";
+  if (diffSec < 60) return "just now";
   if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
   return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+// One row per connector, already collapsed to its furthest stage this session
+// by the server (lib/liveactivity.js) — an id here is the id of the event
+// that reached that stage, so it changes (and re-pulses) each time a
+// connector advances, even though the row itself updates in place rather
+// than adding a new one. Internal-only: never read by exportPartnerReport().
 function renderActivity(recentLive) {
   const items = recentLive || [];
   const seenIds = new Set(items.map((e) => e.id));
@@ -167,6 +175,8 @@ function buildPrintTrendImage(series) {
 // Assembles the partner-facing one-pager from the already-loaded, filtered
 // /api/metrics payload and opens the browser's print dialog (Save as PDF) —
 // the literal "this is what you'd send the connector company" artifact.
+// Deliberately never reads m.recentLive / m.liveSummary — those are internal
+// live-ops data, not aggregate, and must never reach a partner export.
 function exportPartnerReport() {
   const connectorId = $("connectorFilter").value;
   const m = lastMetrics;

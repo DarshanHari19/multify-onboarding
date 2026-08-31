@@ -13,6 +13,7 @@ import { generateFirstWinTasksLLM } from "./lib/firstwin.js";
 import { cleanDisplayName } from "./lib/displayname.js";
 import { roleFit, buildFitJitterTable } from "./lib/rolefit.js";
 import { roleConnectorRates } from "./lib/affinity.js";
+import { collapseLiveEvents } from "./lib/liveactivity.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -188,6 +189,11 @@ function ragConnectorPayload(entry, why) {
     // untouched): flag finance/email-touching connectors so the client can
     // show an explicit opt-in instead of a bare toggle.
     sensitive: isSensitive({ name, cat, desc: entry.description }),
+    // Registry-provided provenance links (curated bundle entries don't carry
+    // these — only RAG/registry results, which are AI-written and unvetted,
+    // so a way to verify the source before enabling matters here).
+    websiteUrl: entry.websiteUrl || null,
+    repoUrl: entry.repoUrl || null,
   };
 }
 
@@ -344,21 +350,22 @@ app.get("/api/metrics", (req, res) => {
   const seriesArr = [];
   for (let d = 13; d >= 0; d--) seriesArr.push({ day: d, leads: series[d] || 0 });
 
-  // Last 10 live (this-session) funnel events, newest first — the activity
-  // ticker that pairs with liveSummary's counter (see dashboard.js
-  // renderActivity). Feedback events are excluded, same as the funnel above.
-  const recentLive = rows
-    .filter((e) => STAGES.includes(e.stage) && e.live)
-    .slice(-10)
-    .reverse()
-    .map((e) => ({
-      id: e.id,
-      stage: e.stage,
-      connectorId: e.connectorId,
-      name: DISPLAY[e.connectorId].name,
-      ico: DISPLAY[e.connectorId].ico,
-      ts: e.ts,
-    }));
+  // This-session live events, collapsed to one row per connector (its
+  // furthest stage reached — see lib/liveactivity.js), newest-advanced
+  // first, capped at 8 — the internal "live ops" ticker that pairs with
+  // liveSummary's counter (see dashboard.js renderActivity). Feedback events
+  // are excluded, same as the funnel above.
+  const recentLive = collapseLiveEvents(
+    rows.filter((e) => STAGES.includes(e.stage) && e.live),
+    8
+  ).map((e) => ({
+    id: e.id,
+    stage: e.stage,
+    connectorId: e.connectorId,
+    name: DISPLAY[e.connectorId].name,
+    ico: DISPLAY[e.connectorId].ico,
+    ts: e.ts,
+  }));
 
   res.json({
     generatedAt: now,

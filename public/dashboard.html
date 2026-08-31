@@ -39,29 +39,27 @@
   </div>
 
   <div class="kpis" style="margin-top:16px;">
-    <div class="kpi"><div class="label">Net-new leads</div><div class="value green" id="kpiLeads">—</div></div>
+    <div class="kpi"><div class="label">Net-new leads</div><div class="value green" id="kpiLeads">—</div><div class="kpi-caption">1 per connector a user enables &amp; connects</div></div>
     <div class="kpi"><div class="label">Rec → Connected</div><div class="value blue" id="kpiConv">—</div></div>
     <div class="kpi"><div class="label">Activation rate</div><div class="value" id="kpiAct">—</div></div>
-    <div class="kpi"><div class="label">Est. lead value</div><div class="value" id="kpiValue">—</div></div>
   </div>
 
-  <div class="grid2">
-    <div class="panel">
-      <h2>Live this session</h2>
-      <p class="hint">Your activity this session, live — isolated from the seeded baseline below so a single connect is visible.</p>
-      <div class="live-stats" id="liveStats"></div>
+  <!-- Internal live-ops block: NOT partner-facing, deliberately styled
+       differently from the aggregate panels below and never read by
+       exportPartnerReport() / the @media print report. -->
+  <div class="panel liveops-panel">
+    <div class="liveops-head">
+      <h2>Live ops — this session</h2>
+      <span class="chip-internal">Internal</span>
     </div>
-    <div class="panel">
-      <h2>Suggestion feedback</h2>
-      <p class="hint">Thumbs up/down on suggestions in the recommender — this trains future bundles.</p>
-      <div class="feedback-summary" id="feedbackSummary"></div>
-    </div>
+    <div class="live-stats" id="liveStats"></div>
+    <div class="activity-feed" id="activityFeed"></div>
   </div>
 
   <div class="panel">
-    <h2>Activity</h2>
-    <p class="hint">Individual live events from this session, newest first — proves "live" isn't just a bigger number.</p>
-    <div class="activity-feed" id="activityFeed"></div>
+    <h2>Suggestion feedback</h2>
+    <p class="hint">Thumbs up/down on suggestions in the recommender — this trains future bundles.</p>
+    <div class="feedback-summary" id="feedbackSummary"></div>
   </div>
 
   <div class="grid2">
