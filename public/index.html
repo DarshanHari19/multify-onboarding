@@ -46,6 +46,14 @@
       <button class="btn" style="margin-left:auto" id="interpretBtn" onclick="interpretNeeds()"></button>
     </div>
     <div class="row"><span class="spin hidden" id="spin">Asking the model…</span></div>
+    <div class="row">
+      <button class="btn ghost" id="catalogToggle" onclick="toggleCatalog()">Browse the full catalog →</button>
+    </div>
+    <div class="catalog-search hidden" id="catalogSearch">
+      <input class="field" id="catalogQuery" type="text" placeholder="Search connectors — try 'postgres' or 'stripe alternative'" oninput="onCatalogInput()" />
+      <p class="hint" id="catalogHint">Type at least 2 characters to search.</p>
+      <div id="catalogResults"></div>
+    </div>
   </div>
 
   <div class="panel hidden" id="bundlePanel">

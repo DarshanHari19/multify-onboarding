@@ -102,6 +102,13 @@ h1 { font-family: 'Krona One', sans-serif; font-weight: 400; font-size: 26px; ma
 
 .field { width: 100%; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); border-radius: 0; padding: 13px 14px; font-size: 14px; font-family: inherit; resize: vertical; }
 .field::placeholder { color: var(--muted); }
+
+.catalog-search { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.catalog-search .field { margin-bottom: 8px; }
+.catalog-result { padding: 10px 14px; }
+.catalog-result .ico { width: 32px; height: 32px; }
+.catalog-result .name { font-size: 13.5px; }
+.catalog-result .why { -webkit-line-clamp: 2; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
 .row { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
 
 button.btn { background: var(--text); color: var(--bg); border: 1px solid var(--text); padding: 12px 20px; border-radius: 0; font-size: 14px; font-weight: 600; font-family: 'Instrument Sans', sans-serif; cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 8px; }

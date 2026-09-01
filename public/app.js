@@ -362,6 +362,83 @@ function renderRetrievalNote(data) {
 
 function fillNeed(s) { $("needs").value = s; }
 
+/* ---- browsable catalog search: plain substring search over the whole
+   registry (GET /api/catalog/search) — no LLM call, instant, makes the
+   "spans 24,941 connectors" claim tangible by letting a user type and see
+   it directly. Separate from the RAG free-text path above. ---- */
+let catalogResults = [];
+let catalogDebounceTimer = null;
+
+function toggleCatalog() {
+  const panel = $("catalogSearch");
+  const opening = panel.classList.contains("hidden");
+  panel.classList.toggle("hidden");
+  $("catalogToggle").textContent = opening ? "Hide catalog search" : "Browse the full catalog →";
+  if (opening) $("catalogQuery").focus();
+}
+
+function onCatalogInput() {
+  clearTimeout(catalogDebounceTimer);
+  const q = $("catalogQuery").value.trim();
+  if (q.length < 2) {
+    catalogResults = [];
+    $("catalogResults").innerHTML = "";
+    $("catalogHint").textContent = "Type at least 2 characters to search.";
+    return;
+  }
+  $("catalogHint").textContent = "Searching…";
+  catalogDebounceTimer = setTimeout(() => runCatalogSearch(q), 300);
+}
+
+async function runCatalogSearch(q) {
+  try {
+    const res = await fetch(`/api/catalog/search?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    if ($("catalogQuery").value.trim() !== q) return; // a newer query has since been typed — drop this stale response
+    catalogResults = data.results || [];
+    if (!data.available) {
+      $("catalogHint").textContent = "Catalog search isn't available in this environment (run npm run ingest && npm run build-index).";
+    } else if (catalogResults.length === 0) {
+      $("catalogHint").textContent = `No matches in ${data.total.toLocaleString()} connectors — try a different term.`;
+    } else {
+      $("catalogHint").textContent = `${catalogResults.length} of ${data.total.toLocaleString()} connectors matched "${q}".`;
+    }
+    renderCatalogResults();
+  } catch (e) {
+    $("catalogHint").textContent = "Search failed — try again.";
+  }
+}
+
+function renderCatalogResults() {
+  const c = $("catalogResults"); c.innerHTML = "";
+  catalogResults.forEach((r) => {
+    const already = present.includes(r.id);
+    const row = document.createElement("div");
+    row.className = "conn catalog-result";
+    row.innerHTML = `
+      <div class="ico"><img src="${r.ico}" alt="" /></div>
+      <div class="meta">
+        <div class="name">${r.name} <span class="tag">${r.cat}</span></div>
+        <div class="why">${r.desc || ""}</div>
+      </div>
+      <button class="btn ghost catalog-add" type="button" ${already ? "disabled" : ""}>${already ? "Added ✓" : "Add"}</button>
+    `;
+    if (!already) row.querySelector(".catalog-add").onclick = () => addFromCatalog(r);
+    c.appendChild(row);
+  });
+}
+
+function addFromCatalog(r) {
+  addConnector(r.id, r.why, true, {
+    name: r.name, ico: r.ico, cat: r.cat, desc: r.desc,
+    sensitive: r.sensitive || null, websiteUrl: r.websiteUrl || null, repoUrl: r.repoUrl || null,
+  });
+  $("bundlePanel").classList.remove("hidden");
+  if (!$("bundleHint").innerHTML.trim()) $("bundleHint").innerHTML = "Added from the full catalog search:";
+  renderConnectors();
+  renderCatalogResults();
+}
+
 function resetAll() {
   selectedRole = null; enabled = {}; present = []; reasons = {}; extraMeta = {}; affinity = {};
   source = {}; feedbackChoice = {}; infoOpen = {}; currentRoleBundle = null; promotions = {};
@@ -372,6 +449,12 @@ function resetAll() {
   $("s3").classList.remove("active");
   renderRetrievalNote({});
   renderRoles();
+  catalogResults = [];
+  $("catalogQuery").value = "";
+  $("catalogResults").innerHTML = "";
+  $("catalogHint").textContent = "Type at least 2 characters to search.";
+  $("catalogSearch").classList.add("hidden");
+  $("catalogToggle").textContent = "Browse the full catalog →";
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
