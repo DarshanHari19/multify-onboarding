@@ -19,15 +19,95 @@ function displayFor(id) { return CONNECTORS[id] || extraMeta[id]; }
 const SURFACE = "onboarding"; // this whole flow is the onboarding surface
 
 let affinity = {}; // connectorId -> { recommended, connected, rate, n }, for the currently selected role
+let currentRoleBundle = null; // ROLES[selectedRole].bundle — fed to adjustBundle() below
+let promotions = {}; // connectorId -> { rate, n } for suggested entries data-promoted to auto
 
 /* ---- flywheel: per-role connect-rate cue (computed, never hardcoded) ---- */
 const AFFINITY_MIN_N = 20;
+const PROMOTE_THRESHOLD = 0.6;
 async function loadAffinity(role) {
   try {
     const res = await fetch(`/api/affinity?role=${encodeURIComponent(role)}`);
     const data = await res.json();
-    if (selectedRole === role) { affinity = data || {}; renderConnectors(); }
+    if (selectedRole === role) { affinity = data || {}; reorderRoleBundle(); renderConnectors(); }
   } catch (e) { /* no cue shown if the fetch fails — non-critical */ }
+}
+
+// Duplicated from lib/sensitivity.js — app.js is a classic script (no
+// module loader, see the firstwin.js note below), so pure helpers used
+// client-side get copied here rather than imported. Keep in sync.
+const SENSITIVE_FINANCE_KEYWORDS = [
+  "pay", "payment", "bank", "invoice", "billing", "wallet", "ledger",
+  "crypto", "revenue", "stripe", "finance", "accounting", "payroll", "tax",
+];
+const SENSITIVE_EMAIL_KEYWORDS = [
+  "email", "e-mail", "mail", "inbox", "gmail", "imap", "smtp", "mailbox",
+];
+function isSensitiveConnector(connector) {
+  const { name = "", cat = "", desc = "" } = connector || {};
+  const text = `${name} ${cat} ${desc}`.toLowerCase();
+  if (!text.trim()) return null;
+  if (SENSITIVE_FINANCE_KEYWORDS.some((kw) => text.includes(kw))) return "finance";
+  if (SENSITIVE_EMAIL_KEYWORDS.some((kw) => text.includes(kw))) return "email";
+  return null;
+}
+
+// Duplicated from lib/bundleadjust.js (unit-tested in test/bundleadjust.test.js)
+// for the same classic-script reason as above. Keep in sync.
+function adjustBundle(bundle, aff, opts, isSensitive) {
+  const { promoteThreshold = 0.6, minN = 20 } = opts || {};
+  const changes = [];
+  const autoGroup = [];
+  const suggestedGroup = [];
+  for (const entry of bundle) {
+    if (entry.auto) { autoGroup.push({ ...entry }); continue; }
+    const a = (aff || {})[entry.id] || { rate: 0, n: 0 };
+    if (a.rate >= promoteThreshold && a.n >= minN && !isSensitive(entry)) {
+      autoGroup.push({ ...entry, auto: true });
+      changes.push({ id: entry.id, type: "promoted", rate: a.rate, n: a.n });
+    } else {
+      suggestedGroup.push({ ...entry });
+    }
+  }
+  const nOf = (id) => ((aff || {})[id] || {}).n || 0;
+  const rateOf = (id) => ((aff || {})[id] || {}).rate || 0;
+  function sortByRateDesc(group) {
+    const sufficient = group.filter((e) => nOf(e.id) >= minN);
+    const insufficient = group.filter((e) => nOf(e.id) < minN);
+    sufficient.sort((a, b) => rateOf(b.id) - rateOf(a.id));
+    return [...sufficient, ...insufficient];
+  }
+  return { ordered: [...sortByRateDesc(autoGroup), ...sortByRateDesc(suggestedGroup)], changes };
+}
+
+// Applies adjustBundle() to the currently selected role's curated bundle:
+// promotes qualifying suggested connectors to auto (never demotes, never
+// promotes anything isSensitiveConnector flags), and reorders `present`
+// within the auto/suggested groups to match — without touching sponsored or
+// free-text-sourced ids elsewhere in `present`.
+function reorderRoleBundle() {
+  promotions = {};
+  if (!currentRoleBundle) return;
+  const { ordered, changes } = adjustBundle(
+    currentRoleBundle,
+    affinity,
+    { promoteThreshold: PROMOTE_THRESHOLD, minN: AFFINITY_MIN_N },
+    (entry) => !!isSensitiveConnector(CONNECTORS[entry.id])
+  );
+  changes.forEach((c) => {
+    if (c.type === "promoted") promotions[c.id] = { rate: c.rate, n: c.n };
+  });
+  ordered.forEach((entry) => {
+    // Risk gate, asserted at the point defaults are applied: a promotion
+    // can only ever reach here for a non-sensitive connector.
+    console.assert(!promotions[entry.id] || !isSensitiveConnector(CONNECTORS[entry.id]),
+      "flywheel: refusing to auto-enable a sensitive connector via promotion", entry.id);
+    if (promotions[entry.id]) enabled[entry.id] = true;
+  });
+  const roleIds = new Set(currentRoleBundle.map((b) => b.id));
+  const newOrder = ordered.map((e) => e.id);
+  let i = 0;
+  present = present.map((id) => (roleIds.has(id) ? newOrder[i++] : id));
 }
 
 const $ = (id) => document.getElementById(id);
@@ -77,7 +157,10 @@ function pickRole(key) {
   $("bundlePanel").classList.remove("hidden");
   $("s3").classList.add("active");
   $("bundleHint").innerHTML = `Curated for <b>${r.title}</b>. Auto-enabled ones are on by default — toggle any off, or add more below.`;
+  $("bundleCaption").classList.remove("hidden");
   affinity = {};
+  currentRoleBundle = r.bundle;
+  reorderRoleBundle(); // no-op ordering until affinity loads, but keeps state consistent
   loadAffinity(key);
   renderRoles(); renderConnectors();
   if (newIds.length) trackMany("recommended", newIds); // only genuinely new recommendations
@@ -117,7 +200,8 @@ function renderConnectors() {
     const needsConsent = !!k.sensitive && !on;
     const aff = affinity[id];
     const inBundle = selectedRole && ROLES[selectedRole].bundle.some((b) => b.id === id);
-    const showCue = inBundle && aff && aff.n >= AFFINITY_MIN_N;
+    const promo = promotions[id];
+    const showCue = inBundle && aff && aff.n >= AFFINITY_MIN_N && !promo;
     // RAG/registry results only (curated bundle entries carry no links) —
     // clickable name reveals the registry description + provenance links,
     // mirroring Multify's own "click an MCP to see its detail" pattern
@@ -135,6 +219,7 @@ function renderConnectors() {
           ${k.isNew ? '<span class="tag new">new · remote MCP</span>' : ""}
         </div>
         <div class="why">${reasons[id] || ""}</div>
+        ${promo ? `<div class="affinity-cue promoted">Promoted to auto — ${Math.round(promo.rate * 100)}% of ${ROLES[selectedRole].title} users connect this · based on connection data, illustrative</div>` : ""}
         ${showCue ? `<div class="affinity-cue">${Math.round(aff.rate * 100)}% of ${ROLES[selectedRole].title} users who saw this connected it · based on connection data, illustrative</div>` : ""}
         ${needsConsent ? `<div class="consent"><span class="consent-icon">${ICONS.alertTriangle}</span>${CONSENT_COPY[k.sensitive]} — enable?</div>` : ""}
         ${hasInfo ? `<div class="conn-popover${infoIsOpen ? "" : " hidden"}">
@@ -267,9 +352,10 @@ function fillNeed(s) { $("needs").value = s; }
 
 function resetAll() {
   selectedRole = null; enabled = {}; present = []; reasons = {}; extraMeta = {}; affinity = {};
-  source = {}; feedbackChoice = {}; infoOpen = {};
+  source = {}; feedbackChoice = {}; infoOpen = {}; currentRoleBundle = null; promotions = {};
   $("needs").value = "";
   $("bundlePanel").classList.add("hidden");
+  $("bundleCaption").classList.add("hidden");
   $("firstWinPanel").classList.add("hidden");
   $("s3").classList.remove("active");
   renderRetrievalNote({});

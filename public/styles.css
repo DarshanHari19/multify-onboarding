@@ -55,6 +55,7 @@ h1 { font-family: 'Krona One', sans-serif; font-weight: 400; font-size: 26px; ma
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 0; padding: 20px; margin-top: 18px; }
 .panel h2 { font-size: 18px; margin: 0 0 4px; font-weight: 600; }
 .panel .hint { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+.panel .hint.bundle-caption { font-size: 11.5px; margin: -8px 0 12px; }
 
 .conn { display: flex; align-items: center; gap: 14px; padding: 14px; border: 1px solid var(--border); border-radius: 0; background: var(--panel-2); margin-bottom: 10px; }
 .conn .ico { width: 38px; height: 38px; border-radius: 0; display: grid; place-items: center; background: var(--panel); flex: none; }
@@ -64,6 +65,7 @@ h1 { font-family: 'Krona One', sans-serif; font-weight: 400; font-size: 26px; ma
 .conn .meta .name { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .conn .meta .why { color: var(--muted); font-size: 12.5px; margin-top: 3px; line-height: 1.4; }
 .conn .meta .affinity-cue { color: var(--muted); font-size: 11.5px; margin-top: 4px; }
+.conn .meta .affinity-cue.promoted { color: var(--green); }
 
 .conn-name-btn { background: none; border: none; padding: 0; margin: 0; font: inherit; font-weight: 600; color: var(--text); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
 .conn-name-btn:hover { text-decoration: underline; }
