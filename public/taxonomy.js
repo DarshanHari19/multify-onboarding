@@ -63,6 +63,10 @@
         { id: "gcal",    auto: true,  why: "Book meetings and check scheduling conflicts" },
         { id: "slack",   auto: false, why: "Loop your team in on won/lost deals" },
       ],
+      // Ad-inventory demo (illustrative — see CLAUDE.md REAL-vs-ILLUSTRATIVE):
+      // one paid, clearly-labeled slot per role, always shown regardless of
+      // fit, distinct from the bundle above. Never auto-enabled.
+      featured: { id: "salesforce", why: "Sponsored placement — Salesforce paid to appear here for every Sales user, regardless of fit." },
     },
     engineer: {
       icon: ICONS.wrench, title: "Engineer", blurb: "Code, issues, and monitoring",
@@ -73,6 +77,7 @@
         { id: "vercel", auto: false, why: "Trigger and inspect deployments" },
         { id: "neon",   auto: false, why: "Query your database directly" },
       ],
+      featured: { id: "jira", why: "Sponsored placement — Jira paid to appear here for every Engineer, regardless of fit." },
     },
     pm: {
       icon: ICONS.clipboardList, title: "Product Manager", blurb: "Specs, roadmap, and coordination",
@@ -83,6 +88,7 @@
         { id: "gcal",   auto: false, why: "Coordinate reviews and launch dates" },
         { id: "github", auto: false, why: "See what's shipping against the roadmap" },
       ],
+      featured: { id: "asana", why: "Sponsored placement — Asana paid to appear here for every Product Manager, regardless of fit." },
     },
     marketer: {
       icon: ICONS.megaphone, title: "Marketer", blurb: "Content, social, and analytics",
@@ -93,6 +99,7 @@
         { id: "gmail",   auto: false, why: "Run and track email campaigns" },
         { id: "hubspot", auto: false, why: "Tie campaigns back to the pipeline" },
       ],
+      featured: { id: "slack", why: "Sponsored placement — Slack paid to appear here for every Marketer, regardless of fit." },
     },
     founder: {
       icon: ICONS.compass, title: "Founder / Ops", blurb: "A bit of everything",
@@ -103,6 +110,7 @@
         { id: "stripe", auto: false, why: "Check revenue and payments on demand" },
         { id: "slack",  auto: false, why: "Broadcast updates to the team" },
       ],
+      featured: { id: "airtable", why: "Sponsored placement — Airtable paid to appear here for every Founder/Ops user, regardless of fit." },
     },
     data: {
       icon: ICONS.barChart, title: "Data / Analyst", blurb: "Warehouses, dashboards, and queries",
@@ -113,6 +121,7 @@
         { id: "neon",      auto: false, why: "Hit application databases directly" },
         { id: "notion",    auto: false, why: "Publish findings your team can read" },
       ],
+      featured: { id: "stripe", why: "Sponsored placement — Stripe paid to appear here for every Data/Analyst user, regardless of fit." },
     },
   };
 

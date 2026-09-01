@@ -78,6 +78,7 @@ h1 { font-family: 'Krona One', sans-serif; font-weight: 400; font-size: 26px; ma
 .tag { font-size: 10.5px; padding: 2px 7px; border-radius: 99px; border: 1px solid var(--border); color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
 .tag.new { color: var(--text); border-color: var(--border); }
 .tag.llm { color: var(--green); border-color: var(--green); }
+.tag.sponsored { color: var(--amber); border-color: var(--amber); }
 
 .toggle { flex: none; width: 46px; height: 26px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--border); position: relative; cursor: pointer; transition: background .15s; }
 .toggle.on { background: var(--text); }
@@ -85,6 +86,7 @@ h1 { font-family: 'Krona One', sans-serif; font-weight: 400; font-size: 26px; ma
 .toggle.on .knob { left: 22px; background: var(--bg); }
 
 .conn.needs-consent { border-color: var(--amber); }
+.conn.featured { border-color: var(--amber); border-style: dashed; }
 .consent { display: flex; align-items: center; gap: 6px; color: var(--amber); font-size: 12px; margin-top: 6px; line-height: 1.4; }
 .consent-icon { width: 14px; height: 14px; flex: none; display: inline-flex; }
 .consent-icon svg { width: 100%; height: 100%; display: block; }

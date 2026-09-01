@@ -143,8 +143,18 @@ function pickRole(key) {
   // anything the free-text layer contributed survives a role switch. An id
   // already present (e.g. matched by both) keeps its existing enabled/why
   // rather than being clobbered back to the bundle default.
-  present = present.filter((id) => source[id] !== "role");
+  present = present.filter((id) => source[id] !== "role" && source[id] !== "sponsored");
   const newIds = [];
+  // Sponsored slot goes first (renders on top, like an ad banner) — a paid,
+  // clearly-labeled placement, distinct from the fit-based bundle below.
+  // Illustrative only (CLAUDE.md REAL-vs-ILLUSTRATIVE): never auto-enabled,
+  // no separate event tracking, just a labeled UI slot.
+  if (r.featured && !present.includes(r.featured.id)) {
+    present.push(r.featured.id);
+    enabled[r.featured.id] = false;
+    newIds.push(r.featured.id);
+  }
+  if (r.featured) { reasons[r.featured.id] = r.featured.why; source[r.featured.id] = "sponsored"; }
   r.bundle.forEach((b) => {
     if (!present.includes(b.id)) {
       present.push(b.id);
@@ -208,14 +218,16 @@ function renderConnectors() {
     // instead of dumping an AI-written description on every card by default.
     const hasInfo = !!(k.websiteUrl || k.repoUrl);
     const infoIsOpen = hasInfo && !!infoOpen[id];
+    const isSponsored = source[id] === "sponsored";
     const row = document.createElement("div");
-    row.className = "conn" + (needsConsent ? " needs-consent" : "");
+    row.className = "conn" + (needsConsent ? " needs-consent" : "") + (isSponsored ? " featured" : "");
     row.innerHTML = `
       <div class="ico"><img src="${k.ico}" alt="" /></div>
       <div class="meta">
         <div class="name">
           ${hasInfo ? `<button class="conn-name-btn" type="button">${k.name}<span class="info-dot">i</span></button>` : k.name}
           <span class="tag">${k.cat}</span>
+          ${isSponsored ? '<span class="tag sponsored">Sponsored</span>' : ""}
           ${k.isNew ? '<span class="tag new">new · remote MCP</span>' : ""}
         </div>
         <div class="why">${reasons[id] || ""}</div>
