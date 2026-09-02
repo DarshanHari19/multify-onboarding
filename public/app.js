@@ -1,7 +1,7 @@
 /* Recommender client. Uses window.TAXONOMY (taxonomy.js) for role bundles,
    calls POST /api/recommend for the LLM free-text layer, and posts funnel
    events to POST /api/events so the dashboard updates live. */
-const { CONNECTORS, ROLES, ICONS, FIRST_WINS } = window.TAXONOMY;
+const { CONNECTORS, ROLES, ICONS, FIRST_WINS, SPONSORED } = window.TAXONOMY;
 
 let selectedRole = null;
 let enabled = {};   // id -> bool
@@ -19,15 +19,130 @@ function displayFor(id) { return CONNECTORS[id] || extraMeta[id]; }
 const SURFACE = "onboarding"; // this whole flow is the onboarding surface
 
 let affinity = {}; // connectorId -> { recommended, connected, rate, n }, for the currently selected role
+let currentRoleBundle = null; // ROLES[selectedRole].bundle — fed to adjustBundle() below
+let promotions = {}; // connectorId -> { rate, n } for suggested entries data-promoted to auto
 
 /* ---- flywheel: per-role connect-rate cue (computed, never hardcoded) ---- */
 const AFFINITY_MIN_N = 20;
+const PROMOTE_THRESHOLD = 0.6;
 async function loadAffinity(role) {
   try {
     const res = await fetch(`/api/affinity?role=${encodeURIComponent(role)}`);
     const data = await res.json();
-    if (selectedRole === role) { affinity = data || {}; renderConnectors(); }
+    if (selectedRole === role) { affinity = data || {}; reorderRoleBundle(); renderConnectors(); }
   } catch (e) { /* no cue shown if the fetch fails — non-critical */ }
+}
+
+// Duplicated from lib/sensitivity.js — app.js is a classic script (no
+// module loader, see the firstwin.js note below), so pure helpers used
+// client-side get copied here rather than imported. Keep in sync.
+const SENSITIVE_FINANCE_KEYWORDS = [
+  "pay", "payment", "bank", "invoice", "billing", "wallet", "ledger",
+  "crypto", "revenue", "stripe", "finance", "accounting", "payroll", "tax",
+];
+const SENSITIVE_EMAIL_KEYWORDS = [
+  "email", "e-mail", "mail", "inbox", "gmail", "imap", "smtp", "mailbox",
+];
+function isSensitiveConnector(connector) {
+  const { name = "", cat = "", desc = "" } = connector || {};
+  const text = `${name} ${cat} ${desc}`.toLowerCase();
+  if (!text.trim()) return null;
+  if (SENSITIVE_FINANCE_KEYWORDS.some((kw) => text.includes(kw))) return "finance";
+  if (SENSITIVE_EMAIL_KEYWORDS.some((kw) => text.includes(kw))) return "email";
+  return null;
+}
+
+// Duplicated from lib/sponsor.js (unit-tested in test/sponsor.test.js) for
+// the same classic-script reason as above. Keep in sync.
+function pickSponsor(sponsored, { role, needText } = {}) {
+  for (const s of sponsored || []) {
+    if (role && s.roles && s.roles.includes(role)) return s;
+  }
+  const text = (needText || "").toLowerCase();
+  if (text) {
+    for (const s of sponsored || []) {
+      if (s.keywords && s.keywords.some((k) => text.includes(k))) return s;
+    }
+  }
+  return null;
+}
+
+// Applies pickSponsor() against the current role/typed text and inserts the
+// match into `present`, if any and if no sponsored slot is already showing
+// this view — relevance-gated (never forces an irrelevant placement) and
+// capped at one slot per view (locked decisions, see CLAUDE.md). Never
+// auto-enabled. Returns the id it added, or null (used for funnel tracking).
+function maybeAddSponsor(needText) {
+  if (present.some((id) => source[id] === "sponsored")) return null;
+  const sponsor = pickSponsor(SPONSORED, { role: selectedRole, needText });
+  if (!sponsor) return null;
+  let isNew = false;
+  if (!present.includes(sponsor.id)) {
+    present.push(sponsor.id);
+    enabled[sponsor.id] = false;
+    isNew = true;
+  }
+  reasons[sponsor.id] = sponsor.why;
+  source[sponsor.id] = "sponsored";
+  return isNew ? sponsor.id : null;
+}
+
+// Duplicated from lib/bundleadjust.js (unit-tested in test/bundleadjust.test.js)
+// for the same classic-script reason as above. Keep in sync.
+function adjustBundle(bundle, aff, opts, isSensitive) {
+  const { promoteThreshold = 0.6, minN = 20 } = opts || {};
+  const changes = [];
+  const autoGroup = [];
+  const suggestedGroup = [];
+  for (const entry of bundle) {
+    if (entry.auto) { autoGroup.push({ ...entry }); continue; }
+    const a = (aff || {})[entry.id] || { rate: 0, n: 0 };
+    if (a.rate >= promoteThreshold && a.n >= minN && !isSensitive(entry)) {
+      autoGroup.push({ ...entry, auto: true });
+      changes.push({ id: entry.id, type: "promoted", rate: a.rate, n: a.n });
+    } else {
+      suggestedGroup.push({ ...entry });
+    }
+  }
+  const nOf = (id) => ((aff || {})[id] || {}).n || 0;
+  const rateOf = (id) => ((aff || {})[id] || {}).rate || 0;
+  function sortByRateDesc(group) {
+    const sufficient = group.filter((e) => nOf(e.id) >= minN);
+    const insufficient = group.filter((e) => nOf(e.id) < minN);
+    sufficient.sort((a, b) => rateOf(b.id) - rateOf(a.id));
+    return [...sufficient, ...insufficient];
+  }
+  return { ordered: [...sortByRateDesc(autoGroup), ...sortByRateDesc(suggestedGroup)], changes };
+}
+
+// Applies adjustBundle() to the currently selected role's curated bundle:
+// promotes qualifying suggested connectors to auto (never demotes, never
+// promotes anything isSensitiveConnector flags), and reorders `present`
+// within the auto/suggested groups to match — without touching sponsored or
+// free-text-sourced ids elsewhere in `present`.
+function reorderRoleBundle() {
+  promotions = {};
+  if (!currentRoleBundle) return;
+  const { ordered, changes } = adjustBundle(
+    currentRoleBundle,
+    affinity,
+    { promoteThreshold: PROMOTE_THRESHOLD, minN: AFFINITY_MIN_N },
+    (entry) => !!isSensitiveConnector(CONNECTORS[entry.id])
+  );
+  changes.forEach((c) => {
+    if (c.type === "promoted") promotions[c.id] = { rate: c.rate, n: c.n };
+  });
+  ordered.forEach((entry) => {
+    // Risk gate, asserted at the point defaults are applied: a promotion
+    // can only ever reach here for a non-sensitive connector.
+    console.assert(!promotions[entry.id] || !isSensitiveConnector(CONNECTORS[entry.id]),
+      "flywheel: refusing to auto-enable a sensitive connector via promotion", entry.id);
+    if (promotions[entry.id]) enabled[entry.id] = true;
+  });
+  const roleIds = new Set(currentRoleBundle.map((b) => b.id));
+  const newOrder = ordered.map((e) => e.id);
+  let i = 0;
+  present = present.map((id) => (roleIds.has(id) ? newOrder[i++] : id));
 }
 
 const $ = (id) => document.getElementById(id);
@@ -63,8 +178,15 @@ function pickRole(key) {
   // anything the free-text layer contributed survives a role switch. An id
   // already present (e.g. matched by both) keeps its existing enabled/why
   // rather than being clobbered back to the bundle default.
-  present = present.filter((id) => source[id] !== "role");
+  present = present.filter((id) => source[id] !== "role" && source[id] !== "sponsored");
   const newIds = [];
+  // Sponsored slot goes first (renders on top, like an ad banner) — relevance-
+  // gated to this role via maybeAddSponsor()/pickSponsor(); shows nothing if
+  // no sponsor is tagged for it. Illustrative only (CLAUDE.md
+  // REAL-vs-ILLUSTRATIVE): never auto-enabled, no separate event tracking,
+  // just a labeled UI slot.
+  const sponsorId = maybeAddSponsor(null);
+  if (sponsorId) newIds.push(sponsorId);
   r.bundle.forEach((b) => {
     if (!present.includes(b.id)) {
       present.push(b.id);
@@ -77,7 +199,10 @@ function pickRole(key) {
   $("bundlePanel").classList.remove("hidden");
   $("s3").classList.add("active");
   $("bundleHint").innerHTML = `Curated for <b>${r.title}</b>. Auto-enabled ones are on by default — toggle any off, or add more below.`;
+  $("bundleCaption").classList.remove("hidden");
   affinity = {};
+  currentRoleBundle = r.bundle;
+  reorderRoleBundle(); // no-op ordering until affinity loads, but keeps state consistent
   loadAffinity(key);
   renderRoles(); renderConnectors();
   if (newIds.length) trackMany("recommended", newIds); // only genuinely new recommendations
@@ -117,24 +242,28 @@ function renderConnectors() {
     const needsConsent = !!k.sensitive && !on;
     const aff = affinity[id];
     const inBundle = selectedRole && ROLES[selectedRole].bundle.some((b) => b.id === id);
-    const showCue = inBundle && aff && aff.n >= AFFINITY_MIN_N;
+    const promo = promotions[id];
+    const showCue = inBundle && aff && aff.n >= AFFINITY_MIN_N && !promo;
     // RAG/registry results only (curated bundle entries carry no links) —
     // clickable name reveals the registry description + provenance links,
     // mirroring Multify's own "click an MCP to see its detail" pattern
     // instead of dumping an AI-written description on every card by default.
     const hasInfo = !!(k.websiteUrl || k.repoUrl);
     const infoIsOpen = hasInfo && !!infoOpen[id];
+    const isSponsored = source[id] === "sponsored";
     const row = document.createElement("div");
-    row.className = "conn" + (needsConsent ? " needs-consent" : "");
+    row.className = "conn" + (needsConsent ? " needs-consent" : "") + (isSponsored ? " featured" : "");
     row.innerHTML = `
       <div class="ico"><img src="${k.ico}" alt="" /></div>
       <div class="meta">
         <div class="name">
           ${hasInfo ? `<button class="conn-name-btn" type="button">${k.name}<span class="info-dot">i</span></button>` : k.name}
           <span class="tag">${k.cat}</span>
+          ${isSponsored ? '<span class="tag sponsored">Sponsored</span>' : ""}
           ${k.isNew ? '<span class="tag new">new · remote MCP</span>' : ""}
         </div>
         <div class="why">${reasons[id] || ""}</div>
+        ${promo ? `<div class="affinity-cue promoted">Promoted to auto — ${Math.round(promo.rate * 100)}% of ${ROLES[selectedRole].title} users connect this · based on connection data, illustrative</div>` : ""}
         ${showCue ? `<div class="affinity-cue">${Math.round(aff.rate * 100)}% of ${ROLES[selectedRole].title} users who saw this connected it · based on connection data, illustrative</div>` : ""}
         ${needsConsent ? `<div class="consent"><span class="consent-icon">${ICONS.alertTriangle}</span>${CONSENT_COPY[k.sensitive]} — enable?</div>` : ""}
         ${hasInfo ? `<div class="conn-popover${infoIsOpen ? "" : " hidden"}">
@@ -214,6 +343,11 @@ async function interpretNeeds() {
       $("bundlePanel").classList.remove("hidden");
       $("bundleHint").innerHTML = "Based on what you described:";
     }
+    // Free-text sponsor match (relevance-gated on typed keywords) — only
+    // fires if no sponsored slot is already showing (e.g. from a role pick
+    // above), and inserted before the fetched connectors so it renders at
+    // the top of the list, same placement as the role path.
+    maybeAddSponsor(text);
 
     const res = await fetch("/api/recommend", {
       method: "POST",
@@ -265,15 +399,99 @@ function renderRetrievalNote(data) {
 
 function fillNeed(s) { $("needs").value = s; }
 
+/* ---- browsable catalog search: plain substring search over the whole
+   registry (GET /api/catalog/search) — no LLM call, instant, makes the
+   "spans 24,941 connectors" claim tangible by letting a user type and see
+   it directly. Separate from the RAG free-text path above. ---- */
+let catalogResults = [];
+let catalogDebounceTimer = null;
+
+function toggleCatalog() {
+  const panel = $("catalogSearch");
+  const opening = panel.classList.contains("hidden");
+  panel.classList.toggle("hidden");
+  $("catalogToggle").textContent = opening ? "Hide catalog search" : "Browse the full catalog →";
+  if (opening) $("catalogQuery").focus();
+}
+
+function onCatalogInput() {
+  clearTimeout(catalogDebounceTimer);
+  const q = $("catalogQuery").value.trim();
+  if (q.length < 2) {
+    catalogResults = [];
+    $("catalogResults").innerHTML = "";
+    $("catalogHint").textContent = "Type at least 2 characters to search.";
+    return;
+  }
+  $("catalogHint").textContent = "Searching…";
+  catalogDebounceTimer = setTimeout(() => runCatalogSearch(q), 300);
+}
+
+async function runCatalogSearch(q) {
+  try {
+    const res = await fetch(`/api/catalog/search?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    if ($("catalogQuery").value.trim() !== q) return; // a newer query has since been typed — drop this stale response
+    catalogResults = data.results || [];
+    if (!data.available) {
+      $("catalogHint").textContent = "Catalog search isn't available in this environment (run npm run ingest && npm run build-index).";
+    } else if (catalogResults.length === 0) {
+      $("catalogHint").textContent = `No matches in ${data.total.toLocaleString()} connectors — try a different term.`;
+    } else {
+      $("catalogHint").textContent = `${catalogResults.length} of ${data.total.toLocaleString()} connectors matched "${q}".`;
+    }
+    renderCatalogResults();
+  } catch (e) {
+    $("catalogHint").textContent = "Search failed — try again.";
+  }
+}
+
+function renderCatalogResults() {
+  const c = $("catalogResults"); c.innerHTML = "";
+  catalogResults.forEach((r) => {
+    const already = present.includes(r.id);
+    const row = document.createElement("div");
+    row.className = "conn catalog-result";
+    row.innerHTML = `
+      <div class="ico"><img src="${r.ico}" alt="" /></div>
+      <div class="meta">
+        <div class="name">${r.name} <span class="tag">${r.cat}</span></div>
+        <div class="why">${r.desc || ""}</div>
+      </div>
+      <button class="btn ghost catalog-add" type="button" ${already ? "disabled" : ""}>${already ? "Added ✓" : "Add"}</button>
+    `;
+    if (!already) row.querySelector(".catalog-add").onclick = () => addFromCatalog(r);
+    c.appendChild(row);
+  });
+}
+
+function addFromCatalog(r) {
+  addConnector(r.id, r.why, true, {
+    name: r.name, ico: r.ico, cat: r.cat, desc: r.desc,
+    sensitive: r.sensitive || null, websiteUrl: r.websiteUrl || null, repoUrl: r.repoUrl || null,
+  });
+  $("bundlePanel").classList.remove("hidden");
+  if (!$("bundleHint").innerHTML.trim()) $("bundleHint").innerHTML = "Added from the full catalog search:";
+  renderConnectors();
+  renderCatalogResults();
+}
+
 function resetAll() {
   selectedRole = null; enabled = {}; present = []; reasons = {}; extraMeta = {}; affinity = {};
-  source = {}; feedbackChoice = {}; infoOpen = {};
+  source = {}; feedbackChoice = {}; infoOpen = {}; currentRoleBundle = null; promotions = {};
   $("needs").value = "";
   $("bundlePanel").classList.add("hidden");
+  $("bundleCaption").classList.add("hidden");
   $("firstWinPanel").classList.add("hidden");
   $("s3").classList.remove("active");
   renderRetrievalNote({});
   renderRoles();
+  catalogResults = [];
+  $("catalogQuery").value = "";
+  $("catalogResults").innerHTML = "";
+  $("catalogHint").textContent = "Type at least 2 characters to search.";
+  $("catalogSearch").classList.add("hidden");
+  $("catalogToggle").textContent = "Browse the full catalog →";
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 

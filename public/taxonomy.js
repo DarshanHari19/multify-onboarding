@@ -116,6 +116,27 @@
     },
   };
 
+  // Ad-inventory demo (illustrative — see CLAUDE.md REAL-vs-ILLUSTRATIVE):
+  // a small pool of paid placements, each tagged with the role(s) and/or
+  // free-text intent keywords it's relevant to. Matched via lib/sponsor.js's
+  // pickSponsor() (role match first, then keyword-in-query), which returns
+  // AT MOST ONE entry — relevance-gated, so a role or query with no match
+  // shows no sponsored slot at all. Never auto-enabled regardless of match.
+  const SPONSORED = [
+    { id: "salesforce", partner: "Salesforce", roles: ["sales"],    keywords: ["crm", "pipeline", "deal", "deals"],
+      why: "Sponsored placement — Salesforce paid to appear for Sales and CRM-related needs." },
+    { id: "jira",       partner: "Atlassian",  roles: ["engineer"], keywords: ["ticket", "issue", "sprint", "backlog"],
+      why: "Sponsored placement — Jira paid to appear for Engineering and issue-tracking needs." },
+    { id: "asana",      partner: "Asana",      roles: ["pm"],       keywords: ["task", "roadmap", "project", "projects"],
+      why: "Sponsored placement — Asana paid to appear for Product/PM and project-tracking needs." },
+    { id: "slack",      partner: "Slack",      roles: ["marketer"], keywords: ["team", "notify", "broadcast", "update team"],
+      why: "Sponsored placement — Slack paid to appear for Marketing and team-communication needs." },
+    { id: "airtable",   partner: "Airtable",   roles: ["founder"],  keywords: ["database", "spreadsheet", "ops", "operations"],
+      why: "Sponsored placement — Airtable paid to appear for Founder/Ops needs." },
+    { id: "stripe",     partner: "Stripe",     roles: ["data"],     keywords: ["payment", "revenue", "billing", "invoice"],
+      why: "Sponsored placement — Stripe paid to appear for Data/Analyst and payments-related needs." },
+  ];
+
   // Used ONLY if the LLM call is unavailable (no key / error). Keeps the demo
   // robust so the free-text layer still returns something sensible offline.
   const FALLBACK_INTENTS = [
@@ -173,5 +194,5 @@
     ],
   };
 
-  root.TAXONOMY = { CONNECTORS, ROLES, FALLBACK_INTENTS, ICONS, FIRST_WINS };
+  root.TAXONOMY = { CONNECTORS, ROLES, FALLBACK_INTENTS, ICONS, FIRST_WINS, SPONSORED };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadRagData, retrieveCandidates } from "./lib/rag.js";
+import { searchCatalog } from "./lib/catalogsearch.js";
 import { warmupEmbedder } from "./lib/embedder.js";
 import { rerankWithLLM } from "./lib/rerank.js";
 import { isSensitive } from "./lib/sensitivity.js";
@@ -234,6 +235,22 @@ app.post("/api/recommend", async (req, res) => {
     const ids = fallbackMatch(needText);
     return res.json({ ids, connectors: curatedConnectorPayload(ids), source: "fallback-error", error: String(e.message) });
   }
+});
+
+/* ============================ CATALOG SEARCH ==============================
+   "Browse the whole catalog" — plain substring search over the full registry
+   (lib/catalogsearch.js), NOT the semantic RAG path above: no embeddings, no
+   LLM call, no OpenRouter key required. Makes the "spans 24,941 connectors"
+   claim tangible by letting a user type and see it directly. Same risk-gate
+   rules as free-text RAG results (suggested: true, never auto-enabled). */
+app.get("/api/catalog/search", (req, res) => {
+  const { q } = req.query;
+  if (!RAG) return res.json({ results: [], total: 0, available: false });
+
+  const entries = [...RAG.catalogById.values()];
+  const hits = searchCatalog(entries, q, 20);
+  const results = hits.map((h) => ragConnectorPayload(RAG.catalogById.get(h.id), "Found by searching the catalog"));
+  res.json({ results, total: RAG.count, available: true });
 });
 
 /* ============================ ROLE INFERENCE ==============================

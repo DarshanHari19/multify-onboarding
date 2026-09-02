@@ -55,6 +55,7 @@ h1 { font-family: 'Krona One', sans-serif; font-weight: 400; font-size: 26px; ma
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 0; padding: 20px; margin-top: 18px; }
 .panel h2 { font-size: 18px; margin: 0 0 4px; font-weight: 600; }
 .panel .hint { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+.panel .hint.bundle-caption { font-size: 11.5px; margin: -8px 0 12px; }
 
 .conn { display: flex; align-items: center; gap: 14px; padding: 14px; border: 1px solid var(--border); border-radius: 0; background: var(--panel-2); margin-bottom: 10px; }
 .conn .ico { width: 38px; height: 38px; border-radius: 0; display: grid; place-items: center; background: var(--panel); flex: none; }
@@ -64,6 +65,7 @@ h1 { font-family: 'Krona One', sans-serif; font-weight: 400; font-size: 26px; ma
 .conn .meta .name { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .conn .meta .why { color: var(--muted); font-size: 12.5px; margin-top: 3px; line-height: 1.4; }
 .conn .meta .affinity-cue { color: var(--muted); font-size: 11.5px; margin-top: 4px; }
+.conn .meta .affinity-cue.promoted { color: var(--green); }
 
 .conn-name-btn { background: none; border: none; padding: 0; margin: 0; font: inherit; font-weight: 600; color: var(--text); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
 .conn-name-btn:hover { text-decoration: underline; }
@@ -76,6 +78,7 @@ h1 { font-family: 'Krona One', sans-serif; font-weight: 400; font-size: 26px; ma
 .tag { font-size: 10.5px; padding: 2px 7px; border-radius: 99px; border: 1px solid var(--border); color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
 .tag.new { color: var(--text); border-color: var(--border); }
 .tag.llm { color: var(--green); border-color: var(--green); }
+.tag.sponsored { color: var(--amber); border-color: var(--amber); }
 
 .toggle { flex: none; width: 46px; height: 26px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--border); position: relative; cursor: pointer; transition: background .15s; }
 .toggle.on { background: var(--text); }
@@ -83,6 +86,7 @@ h1 { font-family: 'Krona One', sans-serif; font-weight: 400; font-size: 26px; ma
 .toggle.on .knob { left: 22px; background: var(--bg); }
 
 .conn.needs-consent { border-color: var(--amber); }
+.conn.featured { border-color: var(--amber); border-style: dashed; }
 .consent { display: flex; align-items: center; gap: 6px; color: var(--amber); font-size: 12px; margin-top: 6px; line-height: 1.4; }
 .consent-icon { width: 14px; height: 14px; flex: none; display: inline-flex; }
 .consent-icon svg { width: 100%; height: 100%; display: block; }
@@ -98,6 +102,13 @@ h1 { font-family: 'Krona One', sans-serif; font-weight: 400; font-size: 26px; ma
 
 .field { width: 100%; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); border-radius: 0; padding: 13px 14px; font-size: 14px; font-family: inherit; resize: vertical; }
 .field::placeholder { color: var(--muted); }
+
+.catalog-search { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.catalog-search .field { margin-bottom: 8px; }
+.catalog-result { padding: 10px 14px; }
+.catalog-result .ico { width: 32px; height: 32px; }
+.catalog-result .name { font-size: 13.5px; }
+.catalog-result .why { -webkit-line-clamp: 2; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
 .row { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
 
 button.btn { background: var(--text); color: var(--bg); border: 1px solid var(--text); padding: 12px 20px; border-radius: 0; font-size: 14px; font-weight: 600; font-family: 'Instrument Sans', sans-serif; cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 8px; }
@@ -215,11 +226,14 @@ select.sel-input { background: var(--panel-2); color: var(--text); border: 1px s
 .pr-footnote { color: #555; font-size: 11px; margin-top: 22px; border-top: 1px dashed #ccc; padding-top: 12px; }
 
 @media print {
-  body * { visibility: hidden; }
-  .partner-report, .partner-report * { visibility: visible; }
+  /* display:none (not visibility:hidden) so the dark app chrome is fully
+     removed from the layout — visibility:hidden keeps its box (and dark
+     background) taking up page height, which was printing 2-3 mostly-blank
+     black pages after the one-page report. */
+  body { background: #fff; }
+  .wrap { display: none; }
   .partner-report {
-    display: block !important;
-    position: absolute; top: 0; left: 0; width: 100%;
+    display: block;
     background: #fff; color: #111; padding: 28px;
   }
 }
