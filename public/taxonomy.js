@@ -63,10 +63,6 @@
         { id: "gcal",    auto: true,  why: "Book meetings and check scheduling conflicts" },
         { id: "slack",   auto: false, why: "Loop your team in on won/lost deals" },
       ],
-      // Ad-inventory demo (illustrative — see CLAUDE.md REAL-vs-ILLUSTRATIVE):
-      // one paid, clearly-labeled slot per role, always shown regardless of
-      // fit, distinct from the bundle above. Never auto-enabled.
-      featured: { id: "salesforce", why: "Sponsored placement — Salesforce paid to appear here for every Sales user, regardless of fit." },
     },
     engineer: {
       icon: ICONS.wrench, title: "Engineer", blurb: "Code, issues, and monitoring",
@@ -77,7 +73,6 @@
         { id: "vercel", auto: false, why: "Trigger and inspect deployments" },
         { id: "neon",   auto: false, why: "Query your database directly" },
       ],
-      featured: { id: "jira", why: "Sponsored placement — Jira paid to appear here for every Engineer, regardless of fit." },
     },
     pm: {
       icon: ICONS.clipboardList, title: "Product Manager", blurb: "Specs, roadmap, and coordination",
@@ -88,7 +83,6 @@
         { id: "gcal",   auto: false, why: "Coordinate reviews and launch dates" },
         { id: "github", auto: false, why: "See what's shipping against the roadmap" },
       ],
-      featured: { id: "asana", why: "Sponsored placement — Asana paid to appear here for every Product Manager, regardless of fit." },
     },
     marketer: {
       icon: ICONS.megaphone, title: "Marketer", blurb: "Content, social, and analytics",
@@ -99,7 +93,6 @@
         { id: "gmail",   auto: false, why: "Run and track email campaigns" },
         { id: "hubspot", auto: false, why: "Tie campaigns back to the pipeline" },
       ],
-      featured: { id: "slack", why: "Sponsored placement — Slack paid to appear here for every Marketer, regardless of fit." },
     },
     founder: {
       icon: ICONS.compass, title: "Founder / Ops", blurb: "A bit of everything",
@@ -110,7 +103,6 @@
         { id: "stripe", auto: false, why: "Check revenue and payments on demand" },
         { id: "slack",  auto: false, why: "Broadcast updates to the team" },
       ],
-      featured: { id: "airtable", why: "Sponsored placement — Airtable paid to appear here for every Founder/Ops user, regardless of fit." },
     },
     data: {
       icon: ICONS.barChart, title: "Data / Analyst", blurb: "Warehouses, dashboards, and queries",
@@ -121,9 +113,29 @@
         { id: "neon",      auto: false, why: "Hit application databases directly" },
         { id: "notion",    auto: false, why: "Publish findings your team can read" },
       ],
-      featured: { id: "stripe", why: "Sponsored placement — Stripe paid to appear here for every Data/Analyst user, regardless of fit." },
     },
   };
+
+  // Ad-inventory demo (illustrative — see CLAUDE.md REAL-vs-ILLUSTRATIVE):
+  // a small pool of paid placements, each tagged with the role(s) and/or
+  // free-text intent keywords it's relevant to. Matched via lib/sponsor.js's
+  // pickSponsor() (role match first, then keyword-in-query), which returns
+  // AT MOST ONE entry — relevance-gated, so a role or query with no match
+  // shows no sponsored slot at all. Never auto-enabled regardless of match.
+  const SPONSORED = [
+    { id: "salesforce", partner: "Salesforce", roles: ["sales"],    keywords: ["crm", "pipeline", "deal", "deals"],
+      why: "Sponsored placement — Salesforce paid to appear for Sales and CRM-related needs." },
+    { id: "jira",       partner: "Atlassian",  roles: ["engineer"], keywords: ["ticket", "issue", "sprint", "backlog"],
+      why: "Sponsored placement — Jira paid to appear for Engineering and issue-tracking needs." },
+    { id: "asana",      partner: "Asana",      roles: ["pm"],       keywords: ["task", "roadmap", "project", "projects"],
+      why: "Sponsored placement — Asana paid to appear for Product/PM and project-tracking needs." },
+    { id: "slack",      partner: "Slack",      roles: ["marketer"], keywords: ["team", "notify", "broadcast", "update team"],
+      why: "Sponsored placement — Slack paid to appear for Marketing and team-communication needs." },
+    { id: "airtable",   partner: "Airtable",   roles: ["founder"],  keywords: ["database", "spreadsheet", "ops", "operations"],
+      why: "Sponsored placement — Airtable paid to appear for Founder/Ops needs." },
+    { id: "stripe",     partner: "Stripe",     roles: ["data"],     keywords: ["payment", "revenue", "billing", "invoice"],
+      why: "Sponsored placement — Stripe paid to appear for Data/Analyst and payments-related needs." },
+  ];
 
   // Used ONLY if the LLM call is unavailable (no key / error). Keeps the demo
   // robust so the free-text layer still returns something sensible offline.
@@ -182,5 +194,5 @@
     ],
   };
 
-  root.TAXONOMY = { CONNECTORS, ROLES, FALLBACK_INTENTS, ICONS, FIRST_WINS };
+  root.TAXONOMY = { CONNECTORS, ROLES, FALLBACK_INTENTS, ICONS, FIRST_WINS, SPONSORED };
 })(typeof window !== "undefined" ? window : globalThis);

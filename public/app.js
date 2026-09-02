@@ -1,7 +1,7 @@
 /* Recommender client. Uses window.TAXONOMY (taxonomy.js) for role bundles,
    calls POST /api/recommend for the LLM free-text layer, and posts funnel
    events to POST /api/events so the dashboard updates live. */
-const { CONNECTORS, ROLES, ICONS, FIRST_WINS } = window.TAXONOMY;
+const { CONNECTORS, ROLES, ICONS, FIRST_WINS, SPONSORED } = window.TAXONOMY;
 
 let selectedRole = null;
 let enabled = {};   // id -> bool
@@ -50,6 +50,41 @@ function isSensitiveConnector(connector) {
   if (SENSITIVE_FINANCE_KEYWORDS.some((kw) => text.includes(kw))) return "finance";
   if (SENSITIVE_EMAIL_KEYWORDS.some((kw) => text.includes(kw))) return "email";
   return null;
+}
+
+// Duplicated from lib/sponsor.js (unit-tested in test/sponsor.test.js) for
+// the same classic-script reason as above. Keep in sync.
+function pickSponsor(sponsored, { role, needText } = {}) {
+  for (const s of sponsored || []) {
+    if (role && s.roles && s.roles.includes(role)) return s;
+  }
+  const text = (needText || "").toLowerCase();
+  if (text) {
+    for (const s of sponsored || []) {
+      if (s.keywords && s.keywords.some((k) => text.includes(k))) return s;
+    }
+  }
+  return null;
+}
+
+// Applies pickSponsor() against the current role/typed text and inserts the
+// match into `present`, if any and if no sponsored slot is already showing
+// this view — relevance-gated (never forces an irrelevant placement) and
+// capped at one slot per view (locked decisions, see CLAUDE.md). Never
+// auto-enabled. Returns the id it added, or null (used for funnel tracking).
+function maybeAddSponsor(needText) {
+  if (present.some((id) => source[id] === "sponsored")) return null;
+  const sponsor = pickSponsor(SPONSORED, { role: selectedRole, needText });
+  if (!sponsor) return null;
+  let isNew = false;
+  if (!present.includes(sponsor.id)) {
+    present.push(sponsor.id);
+    enabled[sponsor.id] = false;
+    isNew = true;
+  }
+  reasons[sponsor.id] = sponsor.why;
+  source[sponsor.id] = "sponsored";
+  return isNew ? sponsor.id : null;
 }
 
 // Duplicated from lib/bundleadjust.js (unit-tested in test/bundleadjust.test.js)
@@ -145,16 +180,13 @@ function pickRole(key) {
   // rather than being clobbered back to the bundle default.
   present = present.filter((id) => source[id] !== "role" && source[id] !== "sponsored");
   const newIds = [];
-  // Sponsored slot goes first (renders on top, like an ad banner) — a paid,
-  // clearly-labeled placement, distinct from the fit-based bundle below.
-  // Illustrative only (CLAUDE.md REAL-vs-ILLUSTRATIVE): never auto-enabled,
-  // no separate event tracking, just a labeled UI slot.
-  if (r.featured && !present.includes(r.featured.id)) {
-    present.push(r.featured.id);
-    enabled[r.featured.id] = false;
-    newIds.push(r.featured.id);
-  }
-  if (r.featured) { reasons[r.featured.id] = r.featured.why; source[r.featured.id] = "sponsored"; }
+  // Sponsored slot goes first (renders on top, like an ad banner) — relevance-
+  // gated to this role via maybeAddSponsor()/pickSponsor(); shows nothing if
+  // no sponsor is tagged for it. Illustrative only (CLAUDE.md
+  // REAL-vs-ILLUSTRATIVE): never auto-enabled, no separate event tracking,
+  // just a labeled UI slot.
+  const sponsorId = maybeAddSponsor(null);
+  if (sponsorId) newIds.push(sponsorId);
   r.bundle.forEach((b) => {
     if (!present.includes(b.id)) {
       present.push(b.id);
@@ -311,6 +343,11 @@ async function interpretNeeds() {
       $("bundlePanel").classList.remove("hidden");
       $("bundleHint").innerHTML = "Based on what you described:";
     }
+    // Free-text sponsor match (relevance-gated on typed keywords) — only
+    // fires if no sponsored slot is already showing (e.g. from a role pick
+    // above), and inserted before the fetched connectors so it renders at
+    // the top of the list, same placement as the role path.
+    maybeAddSponsor(text);
 
     const res = await fetch("/api/recommend", {
       method: "POST",
