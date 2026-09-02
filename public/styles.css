@@ -226,11 +226,14 @@ select.sel-input { background: var(--panel-2); color: var(--text); border: 1px s
 .pr-footnote { color: #555; font-size: 11px; margin-top: 22px; border-top: 1px dashed #ccc; padding-top: 12px; }
 
 @media print {
-  body * { visibility: hidden; }
-  .partner-report, .partner-report * { visibility: visible; }
+  /* display:none (not visibility:hidden) so the dark app chrome is fully
+     removed from the layout — visibility:hidden keeps its box (and dark
+     background) taking up page height, which was printing 2-3 mostly-blank
+     black pages after the one-page report. */
+  body { background: #fff; }
+  .wrap { display: none; }
   .partner-report {
-    display: block !important;
-    position: absolute; top: 0; left: 0; width: 100%;
+    display: block;
     background: #fff; color: #111; padding: 28px;
   }
 }
